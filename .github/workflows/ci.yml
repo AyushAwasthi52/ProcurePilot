@@ -30,3 +30,4 @@ jobs:
 
       - name: Execute Vitest unit and golden tests
         run: npm test
+

@@ -49,3 +49,4 @@ export function AppHeader({ currentStep = "brief", className = "" }: AppHeaderPr
     </header>
   );
 }
+

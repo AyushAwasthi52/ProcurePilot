@@ -28,3 +28,4 @@ In commerce and procurement systems, prices fluctuate, item availability changes
 - Impossible for client-side manipulation to charge a different amount or redirect payment to another merchant.
 - Guarantees explicit human agency at the money boundary.
 - Full auditable trace linking the exact approved terms to the payment record.
+

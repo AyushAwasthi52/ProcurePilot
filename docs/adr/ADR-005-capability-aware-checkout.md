@@ -27,3 +27,4 @@ enum CheckoutCapability {
 - Preserves trust: the platform never promises an automated purchase it cannot legitimately fulfill.
 - Zero reliance on brittle, non-compliant web scraping or CAPTCHA bypasses.
 - Provides a clean extension path for future commerce protocols (such as Agentic Commerce Protocol / ACP) as partner APIs become available.
+

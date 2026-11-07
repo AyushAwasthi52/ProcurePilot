@@ -52,3 +52,4 @@ describe("Design System Tokens & Vocabulary", () => {
     expect(provenanceVocabulary).toContain("Verified");
   });
 });
+

@@ -25,3 +25,4 @@ interface Money {
 - Guaranteed mathematical precision without rounding anomalies.
 - Direct alignment with PayPal Orders v2 monetary schemas.
 - Complete prevention of floating-point comparison bugs in budget compliance checks.
+

@@ -27,3 +27,4 @@ interface ProductProvider {
 ## Consequences
 - Clean separation between provider ingestion mechanics and decision intelligence.
 - New providers can be plugged in without changing scoring or purchase workflows.
+

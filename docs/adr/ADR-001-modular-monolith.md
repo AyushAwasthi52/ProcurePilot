@@ -28,3 +28,4 @@ Boundary violations are enforced through ESLint import rules and automated tests
 - Fast developer feedback loop and direct refactoring across server endpoints and clients.
 - Prevents architectural erosion and domain leakage.
 - High testability: domain algorithms can be tested as pure, deterministic unit tests without network or database dependencies.
+

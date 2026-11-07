@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CheckoutCapability {
+  DEMO_PAYPAL
+  MERCHANT_API
+  HANDOFF_ONLY
+}
+
+enum CostStatus {
+  KNOWN
+  ESTIMATED
+  UNKNOWN
+}
+
+enum PlanStatus {
+  ACTIVE
+  SUPERSEDED
+  EXPIRED
+  APPROVED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAYER_ACTION_REQUIRED
+  CAPTURE_PENDING
+  COMPLETED
+  CANCELLED
+  DECLINED
+  FAILED
+  EXPIRED
+  REFUNDED
+  REQUIRES_RECONCILIATION
+}
+
+model User {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  name         String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+  requests     PurchaseRequest[]
+  plans        PurchasePlan[]
+  approvals    Approval[]
+  auditEvents  AuditEvent[]
+
+  @@index([email])
+}
+
+model PurchaseRequest {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rawPrompt   String
+  status      String        @default("DRAFT") // DRAFT, CLARIFYING, SEARCHING, COMPLETED, CANCELLED
+  region      String        @default("US") // ISO 3166-1 alpha-2
+  currency    String        @default("USD") @db.Char(3)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  brief       PurchaseBrief?
+  searchRuns  SearchRun[]
+  plans       PurchasePlan[]
+
+  @@index([userId, createdAt])
+}
+
+model PurchaseBrief {
+  id             String          @id @default(cuid())
+  requestId      String          @unique
+  request        PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  schemaVersion  Int             @default(3)
+  category       String
+  query          String
+  useCases       Json            // string[]
+  budgetMinor    Int
+  budgetCurrency String          @db.Char(3)
+  includesShipping Boolean       @default(true)
+  mustHave       Json            // Array<{ attribute, operator, value }>
+  preferences    Json            // Array<{ attribute, weight, preferredValues }>
+  excludedBrands Json?           // string[]
+  preferredBrands Json?          // string[]
+  region         String          @db.Char(2)
+  quantity       Int             @default(1)
+  urgency        String          @default("normal") // low, normal, urgent
+  assumptions    Json            // Array<{ field, value, origin }>
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model SearchRun {
+  id               String            @id @default(cuid())
+  requestId        String
+  request          PurchaseRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  status           String            // IN_PROGRESS, COMPLETE, PARTIAL, CANCELLED, FAILED
+  startedAt        DateTime          @default(now())
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  providerOutcomes Json              // Record<providerId, { status, offerCount, latencyMs, error? }>
+  scoreBreakdowns  ScoreBreakdown[]
+
+  @@index([requestId, startedAt])
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  canonicalKey String   @unique // deterministic hash of brand + normalized model
+  title        String
+  brand        String
+  category     String
+  attributes   Json     // normalized spec dictionary
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  offers       Offer[]
+
+  @@index([category, brand])
+}
+
+model Offer {
+  id                 String             @id @default(cuid())
+  productId          String
+  product            Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  providerId         String
+  providerOfferId    String?
+  merchantId         String
+  merchantName       String
+  url                String
+  priceMinor         Int
+  currency           String             @db.Char(3)
+  shippingStatus     CostStatus         @default(UNKNOWN)
+  shippingMinor      Int?
+  availability       String             @default("in_stock") // in_stock, out_of_stock, unknown
+  checkoutCapability CheckoutCapability @default(HANDOFF_ONLY)
+  sourceObservedAt   DateTime
+  ingestedAt         DateTime           @default(now())
+  isDemo             Boolean            @default(false)
+  
+  priceSnapshots     PriceSnapshot[]
+  scoreBreakdowns    ScoreBreakdown[]
+  trustAssessments   TrustAssessment[]
+  purchasePlans      PurchasePlan[]
+
+  @@unique([providerId, providerOfferId])
+  @@index([productId, sourceObservedAt])
+}
+
+model PriceSnapshot {
+  id               String   @id @default(cuid())
+  offerId          String
+  offer            Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  amountMinor      Int
+  currency         String   @db.Char(3)
+  availability     String
+  sourceObservedAt DateTime
+  ingestedAt       DateTime @default(now())
+  source           String
+
+  @@index([offerId, sourceObservedAt])
+}
+
+model ScoreBreakdown {
+  id                String    @id @default(cuid())
+  offerId           String
+  offer             Offer     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  searchRunId       String
+  searchRun         SearchRun @relation(fields: [searchRunId], references: [id], onDelete: Cascade)
+  modelVersion      String    // e.g. "consumer-electronics-v1"
+  totalScore        Float
+  completeness      Float     // 0.0 - 1.0
+  confidence        String    // HIGH, MEDIUM, LOW
+  components        Json      // { requirementFit, performancePerDollar, priceAttractiveness, sellerConfidence, ownershipValue }
+  constraintResults Json      // Record<constraintId, 'PASS' | 'FAIL' | 'UNVERIFIED'>
+  createdAt         DateTime  @default(now())
+
+  @@index([searchRunId, totalScore])
+}
+
+model TrustAssessment {
+  id         String   @id @default(cuid())
+  offerId    String
+  offer      Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  riskLevel  String   // LOW, MEDIUM, HIGH
+  signals    Json     // Array<{ id, severity, evidence, description }>
+  assessedAt DateTime @default(now())
+
+  @@index([offerId])
+}
+
+model Merchant {
+  id                 String             @id @default(cuid())
+  name               String
+  checkoutCapability CheckoutCapability @default(HANDOFF_ONLY)
+  adapterId          String?
+  enabled            Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model PurchasePlan {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestId       String
+  request         PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  offerId         String
+  offer           Offer        @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  version         Int          @default(1)
+  itemSnapshot    Json         // Snapshot of title, merchant, specs at plan creation
+  quantity        Int          @default(1)
+  itemMinor       Int
+  shippingStatus  CostStatus
+  shippingMinor   Int?
+  taxStatus       CostStatus   @default(UNKNOWN)
+  taxMinor        Int?
+  totalKnownMinor Int
+  currency        String       @db.Char(3)
+  planHash        String       // SHA-256 of canonical fields
+  status          PlanStatus   @default(ACTIVE)
+  expiresAt       DateTime
+  supersededById  String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  approvals       Approval[]
+  payments        Payment[]
+
+  @@unique([userId, offerId, version])
+  @@index([status, expiresAt])
+}
+
+model Approval {
+  id                  String       @id @default(cuid())
+  planId              String
+  plan                PurchasePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planHash            String
+  approvedAmountMinor Int
+  approvedCurrency    String       @db.Char(3)
+  acknowledgedUnverified Json?     // string[]
+  approvedAt          DateTime     @default(now())
+  revokedAt           DateTime?
+  payments            Payment[]
+
+  @@index([planId, revokedAt])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  planId            String
+  plan              PurchasePlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  approvalId        String
+  approval          Approval      @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  provider          String        // "PAYPAL", "SIMULATED", etc.
+  providerOrderId   String?       @unique
+  providerCaptureId String?       @unique
+  status            PaymentStatus @default(CREATED)
+  amountMinor       Int
+  currency          String        @db.Char(3)
+  idempotencyKey    String        @unique
+  failureCode       String?
+  version           Int           @default(1) // For optimistic locking
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  providerEventId String    @unique
+  eventType       String
+  status          String    // RECEIVED, PROCESSED, IGNORED, FAILED
+  payloadHash     String
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@index([receivedAt, status])
+}
+
+model IdempotencyRecord {
+  key         String   @id
+  userId      String
+  route       String
+  requestHash String
+  responseJson String  @db.Text
+  statusCode  Int
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entityType String   // "PurchaseRequest", "PurchasePlan", "Approval", "Payment"
+  entityId   String
+  action     String   // "CREATED", "APPROVED", "CAPTURED", "REVOKED", etc.
+  metadata   Json     // Sanitized context, hashes, amounts, IPs
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Provider {
+  id        String   @id
+  name      String
+  type      String   // "CATALOG", "PAYMENT"
+  enabled   Boolean  @default(true)
+  config    Json?    // Non-sensitive runtime options
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -105,3 +105,4 @@ describe("Price Advice Engine & Historic-Low Gate (Section 6.6)", () => {
     expect(res2.isHistoricLow).toBe(true);
   });
 });
+

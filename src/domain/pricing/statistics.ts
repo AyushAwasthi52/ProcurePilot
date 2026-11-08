@@ -97,3 +97,4 @@ export function computePriceStatistics(
     currency: cleanCurrency,
   };
 }
+

@@ -38,3 +38,4 @@ export interface PriceAdviceResult {
   isHistoricLow: boolean;
   statistics: PriceStatistics;
 }
+

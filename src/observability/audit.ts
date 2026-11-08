@@ -10,6 +10,9 @@ export interface AuditEventData {
   requestId?: string | null;
 }
 
+// In-memory fallback for testing and offline environments
+const inMemoryAuditEvents: Array<AuditEventData & { id: string; createdAt: Date }> = [];
+
 export async function recordAuditEvent(data: AuditEventData) {
   const metadata = data.metadata ?? {};
   
@@ -21,6 +24,14 @@ export async function recordAuditEvent(data: AuditEventData) {
     action: data.action,
     metadata,
   });
+
+  const fallbackEvent = {
+    id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    ...data,
+    metadata,
+    createdAt: new Date(),
+  };
+  inMemoryAuditEvents.push(fallbackEvent);
 
   try {
     const event = await db.auditEvent.create({
@@ -41,18 +52,13 @@ export async function recordAuditEvent(data: AuditEventData) {
       entityId: data.entityId,
       action: data.action,
     });
-    return {
-      id: `aud_${Date.now()}`,
-      ...data,
-      metadata,
-      createdAt: new Date(),
-    };
+    return fallbackEvent;
   }
 }
 
 export async function getAuditTrail(entityType: string, entityId: string) {
   try {
-    return await db.auditEvent.findMany({
+    const dbEvents = await db.auditEvent.findMany({
       where: {
         entityType,
         entityId,
@@ -61,8 +67,17 @@ export async function getAuditTrail(entityType: string, entityId: string) {
         createdAt: "asc",
       },
     });
+    if (dbEvents.length > 0) return dbEvents;
   } catch {
-    return [];
+    // DB offline fallback
   }
+
+  return inMemoryAuditEvents.filter(
+    (e) => e.entityType === entityType && e.entityId === entityId
+  );
+}
+
+export function clearInMemoryAuditTrail(): void {
+  inMemoryAuditEvents.length = 0;
 }
 

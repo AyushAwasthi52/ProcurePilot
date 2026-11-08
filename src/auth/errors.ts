@@ -71,6 +71,16 @@ export class OfferChangedError extends ApiError {
   }
 }
 
+export class DatabaseUnavailableError extends ApiError {
+  constructor(
+    message = "Database service is temporarily unavailable",
+    details?: unknown
+  ) {
+    super("INTERNAL", message, 503, true, details);
+    this.name = "DatabaseUnavailableError";
+  }
+}
+
 export function createErrorResponse(
   error: unknown,
   requestId: string

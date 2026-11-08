@@ -190,7 +190,7 @@ export class EBayBrowseAdapter implements ProductProvider {
       input.query
     )}&limit=10`;
 
-    const res = await fetch(searchUrl, {
+    let res = await fetch(searchUrl, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -200,10 +200,24 @@ export class EBayBrowseAdapter implements ProductProvider {
       signal,
     });
 
+    // Token invalidation and 1-time retry on 401 Unauthorized
     if (res.status === 401) {
-      // Invalidate cached token on 401
       this.tokenCache = null;
-      throw new Error("eBay access token expired or invalid");
+      const freshToken = await this.getAccessToken(signal);
+      res = await fetch(searchUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${freshToken}`,
+          "X-EBAY-C-MARKETPLACE-ID": marketplace,
+          Accept: "application/json",
+        },
+        signal,
+      });
+
+      if (res.status === 401) {
+        this.tokenCache = null;
+        throw new Error("eBay access token expired or invalid after retry");
+      }
     }
 
     if (!res.ok) {
@@ -295,14 +309,33 @@ export class EBayBrowseAdapter implements ProductProvider {
 
   async healthCheck(): Promise<ProviderHealth> {
     const isConfigured = this.isConfigured();
-    return {
-      healthy: isConfigured,
-      isConfigured,
-      kind: isConfigured ? "LIVE" : "UNCONFIGURED",
-      message: isConfigured
-        ? "eBay Browse API adapter configured"
-        : "EBAY_CLIENT_ID and EBAY_CLIENT_SECRET are not configured",
-    };
+    if (!isConfigured) {
+      return {
+        healthy: false,
+        isConfigured: false,
+        kind: "UNCONFIGURED",
+        message: "EBAY_CLIENT_ID and EBAY_CLIENT_SECRET are not configured",
+      };
+    }
+
+    try {
+      await this.getAccessToken();
+      return {
+        healthy: true,
+        isConfigured: true,
+        kind: "LIVE",
+        message: "eBay Browse API adapter configured and authenticated",
+      };
+    } catch (err: unknown) {
+      return {
+        healthy: false,
+        isConfigured: true,
+        kind: "LIVE",
+        message: `eBay client credentials configured but authentication failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
   }
 }
 

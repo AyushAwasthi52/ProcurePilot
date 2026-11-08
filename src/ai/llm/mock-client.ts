@@ -8,9 +8,9 @@ function extractCleanSearchQuery(userPrompt: string, category: string): string {
     // remove prompt wrapper if present
     .replace(/<USER_REQUEST>|<\/USER_REQUEST>/gi, "")
     // remove budget phrases: under ₹8,000, under $1,800, max ₹40,000, budget 500, etc.
-    .replace(/\b(?:under|max|budget(?:\s*(?:of|is|:))?|cap|up to|around|within)\s*[₹$€£¥]?\s*[\d,]+(?:\.\d+)?(?:\s*(?:dollars|usd|eur|gbp|inr|rs|rupees|bucks))?/gi, "")
+    .replace(/\b(?:under|max|budget(?:\s*(?:of|is|:))?|cap|up to|around|within)\s*[₹$€£¥]?\s*[\d,]+(?:\.\d+)?(?:\s*(?:dollars|usd|eur|gbp|inr|rs|rupees|bucks|cad|aud))?\b/gi, "")
     .replace(/[₹$€£¥]\s*[\d,]+(?:\.\d+)?/gi, "")
-    .replace(/\b[\d,]+(?:\.\d+)?\s*(?:dollars|usd|eur|gbp|inr|rs|rupees|bucks)\b/gi, "")
+    .replace(/\b[\d,]+(?:\.\d+)?\s*(?:dollars|usd|eur|gbp|inr|rs|rupees|bucks|cad|aud)\b/gi, "")
     // remove quantity and urgency
     .replace(/\b(?:quantity|qty)\s*[:=]?\s*\d+\b/gi, "")
     .replace(/\b\d+x\b/gi, "")
@@ -92,8 +92,8 @@ export class MockLlmClient implements LlmClient {
     let budgetMinor: number | null = null;
     let isBudgetExplicit = false;
 
-    // A. Currency symbol/code prefix: e.g. ₹8,000, $1,800, €350, Rs 500
-    const prefixMatch = userPrompt.match(/(?:[₹$€£¥]|rs\.?|inr|usd|eur|gbp)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
+    // A. Currency symbol/code prefix: e.g. ₹8,000, $1,800, €350, Rs 500, CAD 400
+    const prefixMatch = userPrompt.match(/(?:[₹$€£¥]|rs\.?|inr|usd|eur|gbp|cad|aud)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i);
     if (prefixMatch) {
       const raw = parseFloat(prefixMatch[1].replace(/,/g, ""));
       if (!isNaN(raw) && raw > 0) {
@@ -105,7 +105,7 @@ export class MockLlmClient implements LlmClient {
     // B. Keyword prefix: e.g. under 8000, under ₹8,000, max 500, budget of 400
     if (budgetMinor === null) {
       const keywordMatch = userPrompt.match(
-        /(?:under|max|budget(?:\s*(?:of|is|:))?|cap|up to|around|within)\s*(?:[₹$€£¥]|rs\.?|inr|usd|eur|gbp)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i
+        /(?:under|max|budget(?:\s*(?:of|is|:))?|cap|up to|around|within)\s*(?:[₹$€£¥]|rs\.?|inr|usd|eur|gbp|cad|aud)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i
       );
       if (keywordMatch) {
         const raw = parseFloat(keywordMatch[1].replace(/,/g, ""));
@@ -116,10 +116,10 @@ export class MockLlmClient implements LlmClient {
       }
     }
 
-    // C. Suffix notation: e.g. 8000 rupees, 500 dollars, 40000 inr
+    // C. Suffix notation: e.g. 8000 rupees, 500 dollars, 40000 inr, 600 cad
     if (budgetMinor === null) {
       const suffixMatch = userPrompt.match(
-        /([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:[₹$€£¥]|rs\.?|inr|usd|eur|gbp|dollars?|rupees?|bucks)/i
+        /([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:[₹$€£¥]|rs\.?|inr|usd|eur|gbp|cad|aud|dollars?|rupees?|bucks)/i
       );
       if (suffixMatch) {
         const raw = parseFloat(suffixMatch[1].replace(/,/g, ""));

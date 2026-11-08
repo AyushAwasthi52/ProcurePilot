@@ -1,0 +1,12 @@
+{
+  "taskId": "task-stabilization-001",
+  "taskTitle": "Stabilize category-agnostic purchasing, provider integrations and data integrity",
+  "status": "READY_FOR_AUDIT",
+  "branch": "main",
+  "commit": "edb8992eecd497ccb781b8a00b2ed0b1734fb61e",
+  "iteration": 2,
+  "maxIterations": 3,
+  "auditorFeedbackPending": true,
+  "accepted": false,
+  "updatedAt": "2026-11-08T08:52:04.032Z"
+}

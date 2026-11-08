@@ -120,3 +120,32 @@
    - TypeScript compilation passing (`npm run typecheck`).
    - ESLint check passing with 0 warnings/errors (`npm run lint`).
    - Next.js production build passing (`npm run build`).
+
+---
+
+## Engineering Audit & Stabilization Sprint
+
+### 1. Database & Brief Integrity Hardening
+- **Distinguishing Outage from 404**: Introduced `DatabaseUnavailableError` (`HTTP 503`, retryable). If PostgreSQL or Prisma throws a connection error, `getPurchaseRequestById` raises `DatabaseUnavailableError` so API routes return 503 instead of masking outages as 404 Not Found.
+- **Production Persistence Guard**: `createPurchaseRequest` and `updatePurchaseBrief` strictly rethrow database failures in production (`NODE_ENV === "production"`), eliminating silent in-memory fallback data loss.
+- **Schema Validation Without Blind Casts**: In `mapDatabaseRowToPurchaseBrief`, eliminated `candidate as PurchaseBrief`. Added legacy sanitization filtering invalid constraints and preferences. If the brief remains invalid, it logs a warning and returns `null`.
+- **Provisional Budget & Constraint Safety**: In `evaluateOfferConstraints`, unconfirmed constraints (`confirmed === false`) and provisional budgets (`isKnown === false`) remain `UNVERIFIED` ("Provisional requirement awaiting buyer confirmation") and never cause hard failure or place candidates in `overBudgetCandidates`.
+
+### 2. Multi-Currency & Query Cleanup
+- Added `CAD` and `AUD` currency detection and budget extraction across prefix, keyword, and suffix regexes in `MockLlmClient`.
+
+### 3. Provider Hardening & Token Retry
+- **eBay Adapter**: Implemented automatic 1-time token cache invalidation and retry on `401 Unauthorized`. Updated `healthCheck()` to attempt authentication before claiming `healthy: true`.
+- **SerpApi Adapter**: Updated `healthCheck()` to report configuration honestly.
+
+### 4. Auditor Bridge & Control Plane
+- Built native Node.js stdio JSON-RPC 2.0 MCP server ([`tools/procurepilot-control-mcp/server.mjs`](tools/procurepilot-control-mcp/server.mjs)) with tools `get_task_status`, `get_auditor_feedback`, `submit_implementation_report`, and `sync_control_state`.
+- Added governance constraints in [`.agents/rules/autonomous-engineering.md`](.agents/rules/autonomous-engineering.md) and [`.agents/skills/autonomous-loop/SKILL.md`](.agents/skills/autonomous-loop/SKILL.md).
+- Created [`AUDITOR_WORKFLOW.md`](AUDITOR_WORKFLOW.md) documenting asynchronous external auditor review protocol.
+- Enforced: immutable append-only reports, iteration limit ($\le 3$), strict prohibition on self-acceptance, and zero automatic merging or deployment.
+
+### 5. Verification Results
+- **Full Test Suite**: 37 test suites, 169/169 tests passing (`npm test`).
+- **TypeScript**: Clean (`npm run typecheck`).
+- **ESLint**: Clean (`npm run lint`).
+- **Production Build**: Clean Next.js 16 build (`npm run build`).

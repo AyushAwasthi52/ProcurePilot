@@ -144,6 +144,14 @@ describe("Universal Product Discovery & Extraction Engine", () => {
     const jpy = await extractRequirementsFromPrompt("webcam under ¥15,000");
     expect(jpy.brief.budget.amountMinor).toBe(15000);
     expect(jpy.brief.budget.currency).toBe("JPY");
+
+    const cad = await extractRequirementsFromPrompt("webcam under CAD 140");
+    expect(cad.brief.budget.amountMinor).toBe(14000);
+    expect(cad.brief.budget.currency).toBe("CAD");
+
+    const aud = await extractRequirementsFromPrompt("webcam under 160 AUD");
+    expect(aud.brief.budget.amountMinor).toBe(16000);
+    expect(aud.brief.budget.currency).toBe("AUD");
   });
 });
 

@@ -87,7 +87,11 @@ export function evaluateAndRankOffers(
       continue;
     }
 
-    if (constraints.isOverBudget && typeof brief.budget?.amountMinor === "number") {
+    if (
+      constraints.isOverBudget &&
+      typeof brief.budget?.amountMinor === "number" &&
+      brief.budget?.isKnown !== false
+    ) {
       const isZeroDecimal = (brief.budget.currency || "USD").toUpperCase() === "JPY";
       const factor = isZeroDecimal ? 1 : 100;
       const overBy = Math.round(

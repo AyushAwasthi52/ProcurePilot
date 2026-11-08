@@ -1,5 +1,12 @@
 import { db } from "@/src/db/client";
-import { PurchaseBrief, PurchaseBriefSchema } from "@/src/ai/schemas/brief";
+import {
+  PurchaseBrief,
+  PurchaseBriefSchema,
+  MustHaveConstraintSchema,
+  PreferenceWeightSchema,
+  AssumptionSchema,
+} from "@/src/ai/schemas/brief";
+import { DatabaseUnavailableError } from "@/src/auth/errors";
 
 export interface CreatePurchaseRequestInput {
   userId: string;
@@ -46,7 +53,7 @@ export function mapDatabaseRowToPurchaseBrief(
       typeof rawMinor === "number" && rawMinor > 0 ? rawMinor : null;
 
     const currency =
-      typeof r.budgetCurrency === "string" && r.budgetCurrency.trim().length === 3
+      typeof r.budgetCurrency === "string"
         ? r.budgetCurrency.toUpperCase()
         : (parentContext?.currency ?? "USD").toUpperCase();
 
@@ -68,7 +75,7 @@ export function mapDatabaseRowToPurchaseBrief(
         : null;
 
     const currency =
-      typeof b.currency === "string" && b.currency.trim().length === 3
+      typeof b.currency === "string"
         ? b.currency.toUpperCase()
         : (parentContext?.currency ?? "USD").toUpperCase();
 
@@ -136,12 +143,12 @@ export function mapDatabaseRowToPurchaseBrief(
   }
 
   const category =
-    typeof r.category === "string" && r.category.trim().length > 0
+    typeof r.category === "string"
       ? r.category
       : "General";
 
   const query =
-    typeof r.query === "string" && r.query.trim().length > 0
+    typeof r.query === "string"
       ? r.query
       : `${category} requirement`;
 
@@ -177,7 +184,37 @@ export function mapDatabaseRowToPurchaseBrief(
     return parsed.data;
   }
 
-  return candidate as PurchaseBrief;
+  // Attempt legacy normalization without bypassing validation
+  const sanitizedMustHave = Array.isArray(mustHave)
+    ? mustHave.filter((m) => MustHaveConstraintSchema.safeParse(m).success)
+    : [];
+
+  const sanitizedPreferences = Array.isArray(preferences)
+    ? preferences.filter((p) => PreferenceWeightSchema.safeParse(p).success)
+    : [];
+
+  const sanitizedAssumptions = Array.isArray(assumptions)
+    ? assumptions.filter((a) => AssumptionSchema.safeParse(a).success)
+    : [];
+
+  const repairedCandidate = {
+    ...candidate,
+    mustHave: sanitizedMustHave,
+    preferences: sanitizedPreferences,
+    assumptions: sanitizedAssumptions,
+  };
+
+  const reParsed = PurchaseBriefSchema.safeParse(repairedCandidate);
+  if (reParsed.success) {
+    return reParsed.data;
+  }
+
+  // Never bypass failed validation with `as PurchaseBrief`
+  console.warn(
+    "[Database Mapper] PurchaseBrief failed schema validation and could not be repaired:",
+    reParsed.error.format()
+  );
+  return null;
 }
 
 export async function createPurchaseRequest(
@@ -223,8 +260,16 @@ export async function createPurchaseRequest(
       ...created,
       brief: mapDatabaseRowToPurchaseBrief(created.brief, { currency, region }),
     };
-  } catch {
-    // In-memory fallback
+  } catch (err: unknown) {
+    // In production, NEVER silently turn database failures into successful request creation.
+    if (process.env.NODE_ENV === "production") {
+      throw new DatabaseUnavailableError(
+        "Failed to persist purchase request to database",
+        err
+      );
+    }
+
+    // In unit test / offline development fallback:
     const id = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const record: PurchaseRequestRecord = {
       id,
@@ -252,7 +297,12 @@ export async function getPurchaseRequestById(
         brief: true,
       },
     });
-    if (!found) return null;
+    if (!found) {
+      if (process.env.NODE_ENV !== "production") {
+        return inMemoryStore.get(id) ?? null;
+      }
+      return null;
+    }
     return {
       ...found,
       brief: mapDatabaseRowToPurchaseBrief(found.brief, {
@@ -260,8 +310,19 @@ export async function getPurchaseRequestById(
         region: found.region,
       }),
     };
-  } catch {
-    return inMemoryStore.get(id) ?? null;
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV === "production") {
+      throw new DatabaseUnavailableError(
+        "Failed to query purchase request from database",
+        err
+      );
+    }
+    const fallback = inMemoryStore.get(id);
+    if (fallback) return fallback;
+    throw new DatabaseUnavailableError(
+      "Database unavailable and record not present in fallback store",
+      err
+    );
   }
 }
 
@@ -320,7 +381,13 @@ export async function updatePurchaseBrief(
         region: parentRequest.region,
       }),
     };
-  } catch {
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV === "production") {
+      throw new DatabaseUnavailableError(
+        "Failed to update purchase brief in database",
+        err
+      );
+    }
     const existing = inMemoryStore.get(requestId);
     if (!existing) return null;
     existing.brief = mapDatabaseRowToPurchaseBrief(brief, {

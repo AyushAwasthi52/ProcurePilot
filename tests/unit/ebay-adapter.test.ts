@@ -199,5 +199,70 @@ describe("eBay Browse API Provider Adapter", () => {
       "Invalid eBay client credentials"
     );
   });
+
+  it("invalidates cached token and retries search on 401 Unauthorized", async () => {
+    const adapter = new EBayBrowseAdapter({
+      clientId: "test_client_id",
+      clientSecret: "test_client_secret",
+      oauthBaseUrl: "https://api.test.ebay.com",
+      apiBaseUrl: "https://api.test.ebay.com",
+    });
+
+    let tokenAttempts = 0;
+    let searchAttempts = 0;
+
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/identity/v1/oauth2/token")) {
+        tokenAttempts++;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: `token_${tokenAttempts}`,
+            expires_in: 7200,
+          }),
+        } as unknown as Response);
+      }
+
+      if (url.includes("/buy/browse/v1/item_summary/search")) {
+        searchAttempts++;
+        if (searchAttempts === 1) {
+          // First attempt fails with 401 expired token
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            text: async () => "Unauthorized: token expired",
+          } as unknown as Response);
+        }
+        // Second attempt with retried token succeeds
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 1,
+            itemSummaries: [
+              {
+                itemId: "v1|item999|0",
+                title: "Retried Keychron Keyboard",
+                price: { value: "85.00", currency: "USD" },
+              },
+            ],
+          }),
+        } as unknown as Response);
+      }
+
+      return Promise.reject(new Error("Unknown endpoint"));
+    });
+
+    const res = await adapter.search(
+      { query: "keyboard", region: "US", currency: "USD" },
+      new AbortController().signal
+    );
+
+    expect(tokenAttempts).toBe(2);
+    expect(searchAttempts).toBe(2);
+    expect(res.offers).toHaveLength(1);
+    expect(res.offers[0].productTitle).toBe("Retried Keychron Keyboard");
+  });
 });
 

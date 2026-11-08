@@ -96,6 +96,26 @@ export function evaluateOfferConstraints(
   // 1. Evaluate user must-haves
   let anyUserFail = false;
   for (const mh of mustHaves) {
+    // Budget is evaluated comprehensively in Section 2
+    if (mh.attribute === "budget") {
+      continue;
+    }
+
+    // Unconfirmed constraint: awaiting explicit user confirmation (never treat as hard barrier)
+    if (mh.confirmed === false) {
+      details.push({
+        constraintId: mh.id || mh.attribute,
+        attribute: mh.attribute,
+        status: "UNVERIFIED",
+        expected: String(mh.value),
+        actual: "Unconfirmed by buyer",
+        message: "Provisional requirement awaiting buyer confirmation",
+      });
+      results[mh.attribute] = "UNVERIFIED";
+      unverifiedAttributes.push(mh.attribute);
+      continue;
+    }
+
     const res = evaluateConstraint(mh, offer);
     details.push(res);
     results[res.attribute] = res.status;
@@ -109,10 +129,11 @@ export function evaluateOfferConstraints(
 
   // 2. Evaluate hard budget constraint (Section 6.3)
   const budgetCapMinor = budget?.amountMinor;
+  const isBudgetKnown = budget?.isKnown !== false && typeof budgetCapMinor === "number";
   let budgetStatus: ConstraintStatus = "PASS";
 
-  if (budgetCapMinor === null || budgetCapMinor === undefined) {
-    // Budget is unknown / not specified -> all offers within budget, but constraint marked UNVERIFIED
+  if (!isBudgetKnown) {
+    // Budget is unknown / not specified or provisional -> all offers within budget, but constraint marked UNVERIFIED
     budgetStatus = "UNVERIFIED";
   } else if (offer.priceMinor > budgetCapMinor) {
     // Item price alone exceeds cap -> hard FAIL
@@ -135,13 +156,13 @@ export function evaluateOfferConstraints(
     constraintId: "budget",
     attribute: "budget",
     status: budgetStatus,
-    expected: budgetCapMinor ? `<= ${budgetCapMinor} ${budget?.currency ?? "USD"}` : "No budget cap set",
+    expected: isBudgetKnown ? `<= ${budgetCapMinor} ${budget?.currency ?? "USD"}` : "No budget cap set",
     actual: `${offer.totalKnownMinor} ${offer.currency}`,
     message:
-      budgetCapMinor === null || budgetCapMinor === undefined
+      !isBudgetKnown
         ? "No budget cap set — all candidate prices eligible"
         : budgetStatus === "FAIL"
-        ? `${budget?.currency ?? "$"}${((offer.totalKnownMinor - budgetCapMinor) / factor).toFixed(isZeroDecimal ? 0 : 2)} over budget cap`
+        ? `${budget?.currency ?? "$"}${((offer.totalKnownMinor - budgetCapMinor!) / factor).toFixed(isZeroDecimal ? 0 : 2)} over budget cap`
         : budgetStatus === "UNVERIFIED"
         ? "Item price under cap, but shipping cost is unknown"
         : "Within budget",

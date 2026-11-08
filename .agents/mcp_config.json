@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "procurepilot-control": {
+      "command": "node",
+      "args": ["tools/procurepilot-control-mcp/server.mjs"],
+      "description": "ProcurePilot Autonomous Engineering Control Plane and Auditor Bridge",
+      "env": {}
+    }
+  }
+}
+

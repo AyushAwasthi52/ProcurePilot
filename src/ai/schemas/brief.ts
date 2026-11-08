@@ -65,3 +65,4 @@ export type PreferenceWeight = z.infer<typeof PreferenceWeightSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
 export type Assumption = z.infer<typeof AssumptionSchema>;
 export type PurchaseBrief = z.infer<typeof PurchaseBriefSchema>;
+

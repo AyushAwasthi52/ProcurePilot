@@ -95,3 +95,4 @@ export const LAPTOP_CATEGORY = {
     } as ClarificationQuestion,
   },
 };
+

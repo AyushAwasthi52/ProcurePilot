@@ -10,3 +10,4 @@ CORE RULES:
 5. If the request involves Machine Learning (ML/AI) on laptops, set CUDA support as a constraint needing confirmation (provenance: "confirm", confirmed: false).
 6. Return valid JSON strictly adhering to the requested schema.
 `;
+

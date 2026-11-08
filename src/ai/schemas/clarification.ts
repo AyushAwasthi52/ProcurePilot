@@ -23,3 +23,4 @@ export const ClarificationAnswerSchema = z.object({
 export type ClarificationOption = z.infer<typeof ClarificationOptionSchema>;
 export type ClarificationQuestion = z.infer<typeof ClarificationQuestionSchema>;
 export type ClarificationAnswer = z.infer<typeof ClarificationAnswerSchema>;
+

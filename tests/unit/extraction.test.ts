@@ -70,3 +70,4 @@ describe("Requirement Extraction & Clarification Engine", () => {
     expect(result.brief.budget.amountMinor).toBeGreaterThan(0);
   });
 });
+

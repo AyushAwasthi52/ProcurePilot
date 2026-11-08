@@ -65,3 +65,4 @@ export async function getAuditTrail(entityType: string, entityId: string) {
     return [];
   }
 }
+

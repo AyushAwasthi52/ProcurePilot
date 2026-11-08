@@ -48,3 +48,4 @@ export function verifyCsrfToken(request: Request): void {
     throw new ForbiddenError("CSRF token mismatch");
   }
 }
+

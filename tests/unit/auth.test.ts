@@ -80,3 +80,4 @@ describe("CSRF Protection", () => {
     expect(() => verifyCsrfToken(postReq)).not.toThrow();
   });
 });
+

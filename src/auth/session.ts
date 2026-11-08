@@ -154,3 +154,4 @@ export function assertOwnership(
     throw new NotFoundError(resourceName);
   }
 }
+

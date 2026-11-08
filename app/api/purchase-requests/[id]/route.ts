@@ -32,3 +32,4 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     return createErrorResponse(error, requestId);
   }
 }
+

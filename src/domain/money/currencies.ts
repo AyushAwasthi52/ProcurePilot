@@ -36,3 +36,4 @@ export function getCurrencyExponent(currencyCode: string): number {
   const code = currencyCode.toUpperCase();
   return CURRENCY_EXPONENTS[code] ?? 2;
 }
+

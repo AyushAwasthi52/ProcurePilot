@@ -41,3 +41,4 @@ export const logger = {
     this.log("error", message, context);
   },
 };
+

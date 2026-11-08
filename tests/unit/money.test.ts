@@ -73,3 +73,4 @@ describe("Money Domain Utility", () => {
     expect(MoneyUtil.isEqual(a, c)).toBe(true);
   });
 });
+

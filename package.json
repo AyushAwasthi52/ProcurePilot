@@ -21,6 +21,9 @@
   "author": "",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "bugs": {
     "url": "https://github.com/AyushAwasthi52/ProcurePilot/issues"
   },

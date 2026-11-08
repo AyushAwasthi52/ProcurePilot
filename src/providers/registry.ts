@@ -26,3 +26,4 @@ export class ProviderRegistry {
 }
 
 export const defaultProviderRegistry = new ProviderRegistry();
+

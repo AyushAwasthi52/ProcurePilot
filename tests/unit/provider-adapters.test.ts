@@ -46,3 +46,4 @@ describe("Product Provider Adapters", () => {
     ).rejects.toThrow("Search aborted by user");
   });
 });
+

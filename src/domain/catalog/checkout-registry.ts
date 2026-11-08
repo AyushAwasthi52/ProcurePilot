@@ -61,3 +61,4 @@ export const CheckoutCapabilityRegistry = {
     return this.getCapability(merchantId) === "DEMO_PAYPAL";
   },
 };
+

@@ -94,3 +94,4 @@ describe("Catalog Normalizer & Deduplicator", () => {
     expect(formatFreshnessLabel(older)).toBe("refreshed 3 min ago");
   });
 });
+

@@ -76,3 +76,4 @@ describe("Explanation Guard (Section 6.8)", () => {
     expect(template).toContain("$170");
   });
 });
+

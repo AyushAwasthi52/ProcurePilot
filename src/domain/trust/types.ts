@@ -16,3 +16,4 @@ export interface TrustAssessmentResult {
   signals: TrustSignal[];
   confidenceDiscount: number; // 0.0 - 0.5
 }
+

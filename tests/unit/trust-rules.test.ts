@@ -82,3 +82,4 @@ describe("Trust Rules Engine (Section 6.7, TR-01 - TR-08)", () => {
     expect(res.signals.some((s) => s.id === "TR-08")).toBe(true);
   });
 });
+

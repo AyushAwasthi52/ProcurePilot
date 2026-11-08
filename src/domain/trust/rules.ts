@@ -132,3 +132,4 @@ export function evaluateTrustRules(
     confidenceDiscount: Math.min(0.5, confidenceDiscount),
   };
 }
+

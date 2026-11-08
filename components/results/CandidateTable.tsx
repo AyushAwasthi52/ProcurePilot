@@ -91,3 +91,4 @@ export function CandidateTable({ candidates }: CandidateTableProps) {
     </div>
   );
 }
+

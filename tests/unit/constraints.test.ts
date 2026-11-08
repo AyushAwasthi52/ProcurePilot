@@ -118,3 +118,4 @@ describe("Tri-State Constraint Evaluation (Section 6.3, FR-016)", () => {
     expect(unverifiedResult.hasUnverified).toBe(true);
   });
 });
+

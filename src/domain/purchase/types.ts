@@ -44,3 +44,4 @@ export interface PurchaseBrief {
   assumptions: Assumption[];
   schemaVersion: 3;
 }
+

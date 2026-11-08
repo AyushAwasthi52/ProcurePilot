@@ -48,3 +48,4 @@ export function ScoreRing({ score, size = 80, strokeWidth = 6 }: ScoreRingProps)
     </div>
   );
 }
+

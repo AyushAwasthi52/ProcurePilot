@@ -35,3 +35,4 @@ export async function GET(
     return createErrorResponse(error, requestId);
   }
 }
+

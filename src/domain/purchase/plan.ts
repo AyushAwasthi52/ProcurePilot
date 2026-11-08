@@ -212,3 +212,4 @@ export function reverifyOffer(
     newPriceMinor: currentOffer.priceMinor,
   };
 }
+

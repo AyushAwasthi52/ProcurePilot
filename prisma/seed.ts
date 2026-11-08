@@ -299,7 +299,7 @@ export async function seed() {
     });
 
     for (const off of p.offers) {
-      await prisma.offer.upsert({
+      const createdOffer = await prisma.offer.upsert({
         where: {
           providerId_providerOfferId: {
             providerId: off.providerId,
@@ -335,6 +335,40 @@ export async function seed() {
           isDemo: off.isDemo,
         },
       });
+
+      // Seed 14 historical snapshots for Halden Vector 16 (matching Screenshot 2: LOW $1,629, NOW $1,649, HIGH $1,719)
+      if (off.providerOfferId === "ofr_vector16_brightline") {
+        const historicalPrices = [
+          { dayOffset: 29, priceMinor: 171900 },
+          { dayOffset: 27, priceMinor: 171000 },
+          { dayOffset: 25, priceMinor: 169900 },
+          { dayOffset: 22, priceMinor: 168900 },
+          { dayOffset: 19, priceMinor: 167900 },
+          { dayOffset: 16, priceMinor: 168500 },
+          { dayOffset: 14, priceMinor: 167900 },
+          { dayOffset: 12, priceMinor: 166900 },
+          { dayOffset: 10, priceMinor: 165900 },
+          { dayOffset: 8, priceMinor: 164900 },
+          { dayOffset: 6, priceMinor: 163900 },
+          { dayOffset: 4, priceMinor: 162900 }, // LOW: $1,629
+          { dayOffset: 2, priceMinor: 163900 },
+          { dayOffset: 0, priceMinor: 164900 }, // NOW: $1,649
+        ];
+
+        for (const snap of historicalPrices) {
+          const obsTime = new Date(Date.now() - snap.dayOffset * 24 * 3600 * 1000);
+          await prisma.priceSnapshot.create({
+            data: {
+              offerId: createdOffer.id,
+              amountMinor: snap.priceMinor,
+              currency: "USD",
+              availability: "in_stock",
+              sourceObservedAt: obsTime,
+              source: "provider_a",
+            },
+          });
+        }
+      }
     }
   }
 

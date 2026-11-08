@@ -16,6 +16,21 @@ export const GENERIC_CATEGORY: CategoryDefinition = {
       label: "Condition",
       type: "string",
     },
+    {
+      name: "material",
+      label: "Material",
+      type: "string",
+    },
+    {
+      name: "connectivity",
+      label: "Connectivity",
+      type: "string",
+    },
+    {
+      name: "ergonomics",
+      label: "Ergonomics / Adjustability",
+      type: "boolean",
+    },
   ],
 
   defaultPreferences: [
@@ -25,5 +40,19 @@ export const GENERIC_CATEGORY: CategoryDefinition = {
     { attribute: "warrantyReturns", label: "Warranty & returns", weight: 10 },
   ],
 
-  clarificationQuestions: {},
+  clarificationQuestions: {
+    category: {
+      id: "clarify_category",
+      attribute: "category",
+      question: "Which product category best matches your purchase requirement?",
+      context: "We detected general or ambiguous purchasing terms.",
+      options: [
+        { id: "opt_cat_laptop", label: "Laptop / Computer", value: "Laptop" },
+        { id: "opt_cat_headphones", label: "Headphones / Audio", value: "Headphones" },
+        { id: "opt_cat_smartphone", label: "Smartphone / Mobile", value: "Smartphone" },
+        { id: "opt_cat_monitor", label: "Monitor / Display", value: "Monitor" },
+        { id: "opt_cat_general", label: "General Equipment / Other", value: "General" },
+      ],
+    },
+  },
 };

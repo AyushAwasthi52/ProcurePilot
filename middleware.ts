@@ -52,8 +52,10 @@ export function middleware(req: NextRequest) {
 
   // Only apply rate limiting to /api/* routes
   if (req.nextUrl.pathname.startsWith("/api")) {
-    // Skip rate limiting in test runs
-    const isTest = req.headers.get("x-test-skip-csrf") === "true";
+    // Skip rate limiting strictly in isolated test runs
+    const isTest =
+      process.env.NODE_ENV === "test" &&
+      req.headers.get("x-test-skip-csrf") === "true";
     const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
 
     if (!isTest && !checkRateLimit(ip)) {

@@ -1,4 +1,4 @@
-import { ProviderSearchInput } from "@/src/providers/types";
+import { ProviderSearchInput, ProviderDataKind, ProviderOutcomeStatus } from "@/src/providers/types";
 import { defaultProviderRegistry, ProviderRegistry } from "@/src/providers/registry";
 import {
   normalizeProviderOffer,
@@ -15,7 +15,8 @@ export type SearchRunStatus =
 
 export interface ProviderOutcome {
   providerId: string;
-  status: "COMPLETED" | "FAILED" | "TIMED_OUT" | "CANCELLED";
+  status: ProviderOutcomeStatus;
+  kind: ProviderDataKind;
   offerCount: number;
   latencyMs: number;
   error?: string;
@@ -75,6 +76,20 @@ export class SearchOrchestrator {
 
     const searchPromises = providers.map(async (provider) => {
       const providerStart = Date.now();
+
+      if (!provider.isConfigured()) {
+        providerOutcomes[provider.id] = {
+          providerId: provider.id,
+          status: "UNCONFIGURED",
+          kind: "UNCONFIGURED",
+          offerCount: 0,
+          latencyMs: 0,
+          error: "Provider integration credentials or endpoints not configured",
+        };
+        onProgress?.("provider.unconfigured", { providerId: provider.id });
+        return;
+      }
+
       onProgress?.("provider.started", { providerId: provider.id });
 
       // Create bounded timeout per provider
@@ -101,6 +116,7 @@ export class SearchOrchestrator {
         providerOutcomes[provider.id] = {
           providerId: provider.id,
           status: "COMPLETED",
+          kind: provider.kind,
           offerCount: normalized.length,
           latencyMs,
         };
@@ -115,10 +131,12 @@ export class SearchOrchestrator {
         controller.signal.removeEventListener("abort", combinedAbort);
 
         const isCancelled = controller.signal.aborted;
-        const isTimeout = timeoutController.signal.aborted && !isCancelled;
+        const isTimeout =
+          (!isCancelled && timeoutController.signal.aborted) ||
+          (err instanceof Error && err.message.toLowerCase().includes("timed out"));
         const latencyMs = Date.now() - providerStart;
 
-        const outcomeStatus = isCancelled
+        const outcomeStatus: ProviderOutcomeStatus = isCancelled
           ? "CANCELLED"
           : isTimeout
           ? "TIMED_OUT"
@@ -130,6 +148,7 @@ export class SearchOrchestrator {
         providerOutcomes[provider.id] = {
           providerId: provider.id,
           status: outcomeStatus,
+          kind: provider.kind,
           offerCount: 0,
           latencyMs,
           error: errorMessage,
@@ -152,14 +171,19 @@ export class SearchOrchestrator {
     if (isCancelled) {
       finalStatus = "CANCELLED";
     } else {
-      const anySuccess = Object.values(providerOutcomes).some(
+      const configuredOutcomes = Object.values(providerOutcomes).filter(
+        (o) => o.status !== "UNCONFIGURED"
+      );
+      const anySuccess = configuredOutcomes.some(
         (o) => o.status === "COMPLETED"
       );
-      const anyFailed = Object.values(providerOutcomes).some(
-        (o) => o.status !== "COMPLETED"
+      const anyFailed = configuredOutcomes.some(
+        (o) => o.status === "FAILED" || o.status === "TIMED_OUT"
       );
 
-      if (!anySuccess) {
+      if (configuredOutcomes.length === 0) {
+        finalStatus = "FAILED";
+      } else if (!anySuccess) {
         finalStatus = "FAILED";
       } else if (anyFailed) {
         finalStatus = "PARTIAL";
@@ -201,6 +225,15 @@ export class SearchOrchestrator {
 
   getRunResult(runId: string): SearchRunResult | null {
     return this.completedRuns.get(runId) ?? null;
+  }
+
+  getLatestRunForRequest(requestId: string): SearchRunResult | null {
+    for (const run of Array.from(this.completedRuns.values()).reverse()) {
+      if (run.requestId === requestId) {
+        return run;
+      }
+    }
+    return null;
   }
 
   findOfferById(offerId: string): NormalizedOffer | null {

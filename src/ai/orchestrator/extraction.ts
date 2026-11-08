@@ -9,8 +9,16 @@ export interface ExtractionResult {
   clarificationQuestion: ClarificationQuestion | null;
 }
 
+export interface ExtractionOverrides {
+  region?: string;
+  currency?: string;
+  quantity?: number;
+  urgency?: "low" | "normal" | "urgent";
+}
+
 export async function extractRequirementsFromPrompt(
-  rawPrompt: string
+  rawPrompt: string,
+  overrides?: ExtractionOverrides
 ): Promise<ExtractionResult> {
   const client = getLlmClient();
 
@@ -22,6 +30,19 @@ export async function extractRequirementsFromPrompt(
     wrappedUserPrompt,
     PurchaseBriefSchema
   );
+
+  if (overrides?.region) {
+    brief.region = overrides.region;
+  }
+  if (overrides?.currency) {
+    brief.budget.currency = overrides.currency;
+  }
+  if (overrides?.quantity) {
+    brief.quantity = overrides.quantity;
+  }
+  if (overrides?.urgency) {
+    brief.urgency = overrides.urgency;
+  }
 
   const clarificationQuestion = evaluateClarificationPolicy(brief);
 

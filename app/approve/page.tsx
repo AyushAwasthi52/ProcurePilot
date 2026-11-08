@@ -10,6 +10,7 @@ import {
 } from "@/components/approval/CheckoutMethodChooser";
 import { PurchaseLifecycleTimeline } from "@/components/approval/PurchaseLifecycleTimeline";
 import { ApprovalBox } from "@/components/approval/ApprovalBox";
+import { getCsrfHeaders } from "@/src/auth/client-csrf";
 
 interface PlanItemSnapshot {
   title: string;
@@ -48,6 +49,7 @@ function ApproveContent() {
   const [isApproved, setIsApproved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [planId, setPlanId] = useState(planIdParam || "plan_7f3a9ce21b04");
   const [planHash, setPlanHash] = useState(
     "27ff97b2b1780688f4fbcf7b26492e197ab466eacd18f2c78bdb2364013e336b"
@@ -66,11 +68,12 @@ function ApproveContent() {
           quantity: 1,
         };
 
+        const csrfHeaders = await getCsrfHeaders();
         const res = await fetch("/api/purchase-plans", {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-test-skip-csrf": "true",
+            ...csrfHeaders,
           },
           body: JSON.stringify(payload),
         });
@@ -100,12 +103,14 @@ function ApproveContent() {
 
   const handleApprove = async () => {
     setIsLoading(true);
+    setApprovalError(null);
     try {
+      const csrfHeaders = await getCsrfHeaders();
       const res = await fetch(`/api/purchase-plans/${planId}/approve`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-test-skip-csrf": "true",
+          ...csrfHeaders,
         },
         body: JSON.stringify({
           planHash,
@@ -117,16 +122,20 @@ function ApproveContent() {
       if (res.ok) {
         setIsApproved(true);
         setIsExpired(false);
+        setApprovalError(null);
       } else {
         const errorData = await res.json().catch(() => ({}));
         if (res.status === 410 || errorData?.error?.code === "PLAN_EXPIRED") {
           setIsExpired(true);
+          setIsApproved(false);
         } else {
-          setIsApproved(true);
+          setApprovalError(errorData?.error?.message || "Plan approval was rejected by server");
+          setIsApproved(false);
         }
       }
-    } catch {
-      setIsApproved(true);
+    } catch (err: unknown) {
+      setApprovalError(err instanceof Error ? err.message : "Approval request failed");
+      setIsApproved(false);
     } finally {
       setIsLoading(false);
     }
@@ -134,12 +143,14 @@ function ApproveContent() {
 
   const handleRefresh = async () => {
     setIsLoading(true);
+    setApprovalError(null);
     try {
+      const csrfHeaders = await getCsrfHeaders();
       const res = await fetch(`/api/purchase-plans/${planId}/refresh`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-test-skip-csrf": "true",
+          ...csrfHeaders,
         },
       });
 
@@ -151,6 +162,7 @@ function ApproveContent() {
         setPlanData(data.newPlan);
         setIsExpired(false);
         setIsApproved(false);
+        setApprovalError(null);
         setReverifySeconds(0);
       }
     } catch {
@@ -244,6 +256,12 @@ function ApproveContent() {
 
           {/* Right Column: Your Approval Box */}
           <div className="lg:col-span-5">
+            {approvalError && (
+              <div className="bg-[#FFF0F0] border border-[#FFD0D0] text-[#A00000] p-4 rounded-xl text-xs mb-4">
+                <strong>Approval Error: </strong>
+                {approvalError}
+              </div>
+            )}
             <ApprovalBox
               amountFormatted={totalCostFormatted}
               currency={currency}

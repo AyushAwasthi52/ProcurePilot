@@ -13,6 +13,7 @@ import { ExcludedPanels } from "@/components/results/ExcludedPanels";
 import { evaluateAndRankOffers, SearchEvaluationResult } from "@/src/domain/scoring/evaluator";
 import { PurchaseBrief } from "@/src/ai/schemas/brief";
 import { ProviderOutcome, SearchRunResult } from "@/src/discovery/search-orchestrator";
+import { getCsrfHeaders } from "@/src/auth/client-csrf";
 
 function formatSpecs(attributes: Record<string, unknown>, category?: string): string {
   if (category === "Laptop" || attributes.ramGb) {
@@ -69,11 +70,12 @@ function CompareContent() {
       setBrief(currentBrief);
 
       // 2. Launch or await Search Orchestration
+      const csrfHeaders = await getCsrfHeaders();
       const searchRes = await fetch(`/api/purchase-requests/${reqId}/search`, {
         method: "POST",
         headers: {
           "x-sync-search": "true",
-          "x-test-skip-csrf": "true",
+          ...csrfHeaders,
         },
       });
 
@@ -242,6 +244,10 @@ function CompareContent() {
               ? "Catalog provider B"
               : providerId;
 
+            const isUnconfigured = outcome.status === "UNCONFIGURED";
+            const isTimedOut = outcome.status === "TIMED_OUT";
+            const isFailed = outcome.status === "FAILED";
+
             if (outcome.status === "COMPLETED") {
               return (
                 <div
@@ -251,7 +257,10 @@ function CompareContent() {
                   <span className="text-[#16191C]">
                     {label} &middot; {outcome.offerCount} offers &middot; {outcome.latencyMs}ms
                   </span>
-                  <ProvenanceChip kind={isSeeded ? "demo-data" : "healthy"} />
+                  <ProvenanceChip
+                    kind={outcome.kind === "DEMO" ? "demo-data" : "healthy"}
+                    customLabel={outcome.kind === "DEMO" ? "Demo fixture" : "Live verified"}
+                  />
                 </div>
               );
             }
@@ -262,15 +271,27 @@ function CompareContent() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#E2DDD0]"
               >
                 <span className="text-[#7A3D00]">
-                  {label} &middot; {outcome.status.toLowerCase()} ({outcome.latencyMs}ms)
+                  {label} &middot;{" "}
+                  {isUnconfigured
+                    ? "Unconfigured"
+                    : isTimedOut
+                    ? "Timed out"
+                    : isFailed
+                    ? "Query failed"
+                    : outcome.status.toLowerCase()}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => executeDiscovery(requestId)}
-                  className="text-xs font-semibold text-[#0E5A55] underline hover:text-[#0A4743] cursor-pointer"
-                >
-                  Retry
-                </button>
+                {!isUnconfigured && (
+                  <button
+                    type="button"
+                    onClick={() => executeDiscovery(requestId)}
+                    className="text-xs font-semibold text-[#0E5A55] underline hover:text-[#0A4743] cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                )}
+                {isUnconfigured && (
+                  <ProvenanceChip kind="unverified" customLabel="Unconfigured" />
+                )}
               </div>
             );
           })}
@@ -500,6 +521,8 @@ function CompareContent() {
             <div className="lg:col-span-5 space-y-6">
               <PriceIntelligenceCard
                 nowMinor={recommended.offer.totalKnownMinor}
+                lowMinor={eligibleCandidates.length > 0 ? Math.min(...eligibleCandidates.map((c) => c.offer.totalKnownMinor)) : undefined}
+                highMinor={eligibleCandidates.length > 0 ? Math.max(...eligibleCandidates.map((c) => c.offer.totalKnownMinor)) : undefined}
                 currency={recommended.offer.currency}
               />
               <SellerSignalsCard

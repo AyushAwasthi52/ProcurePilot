@@ -13,6 +13,13 @@
 - **Phase 8 — Security Hardening, Rate Limiting & Lifecycle Verification:** Security headers middleware, IP-based sliding-window rate limiters, 10-stage end-to-end lifecycle verification test.
 - **Phase 9 — Configuration & Integration Audit:** Centralized Zod environment validation (`src/config/env.ts`), provider-neutral LLM client factory (`GeminiLlmClient` & `MockLlmClient`), decoupled partner catalog adapters, explicit simulated payment controls (`PAYMENTS_SIMULATED`).
 - **Category-Agnostic Transformation:** Transformed application from laptop-specific demo into generic multi-category purchasing intelligence system supporting Laptops, Headphones, Smartphones, Monitors, Furniture, and arbitrary products. Dynamic brief extraction, category-specific clarifications, multi-category discovery, dynamic comparison without static mock candidates, and plan assembly.
+- **Core Purchasing Workflow Stabilization (Phases 1 – 6):**
+  - **Request Lifecycle:** AbortController cancellation on input edits, sequence-based race condition prevention, input association tracking, clean error states, and safe component unmounting. Support for quantity and urgency overrides.
+  - **Truthful Providers:** Eliminated misleading `isDemo: false` flags on all in-memory fixtures. Explicitly distinguished `LIVE`, `DEMO`, `UNCONFIGURED`, `FAILED`, and `TIMED_OUT` outcomes. Isolated provider endpoints and credentials behind validated env schema.
+  - **Category & Attribute Handling:** Preserved rich extracted attributes for unfamiliar / generic procurement (lumbar support, armrests, dual motor, connectivity, ergonomics) instead of empty briefs. Added category clarification questions for ambiguous procurement requests.
+  - **Search Orchestration & Persistence:** Search results persisted and retrievable via `GET /api/purchase-requests/[id]/search`. Comparison page displays real search outcomes, and price intelligence card computes real candidate spread rather than hardcoded laptop prices.
+  - **Security & CSRF Enforcement:** Completely eliminated browser-side `x-test-skip-csrf` bypasses. Added `GET /api/csrf` endpoint and double-submit verification. Restricted test header bypasses strictly to `NODE_ENV === "test"`.
+  - **Regression Testing:** 29 test suites, 129/129 tests passing.
 
 ---
 

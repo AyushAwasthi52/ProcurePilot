@@ -37,7 +37,7 @@ const PARTNER_B_CATALOG_OFFERS: ProviderOffer[] = [
     sellerRating: 2.1,
     ratingCount: 3,
     observedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-    isDemo: false,
+    isDemo: true,
   },
   {
     providerId: "provider_b",
@@ -75,23 +75,45 @@ const PARTNER_B_CATALOG_OFFERS: ProviderOffer[] = [
     warrantyMonths: 24,
     returnWindowDays: 30,
     observedAt: new Date(Date.now() - 1 * 60 * 1000).toISOString(),
-    isDemo: false,
+    isDemo: true,
   },
 ];
+
+export interface ProviderBOptions {
+  apiKey?: string;
+  endpoint?: string;
+  shouldTimeout?: boolean;
+  mode?: "demo" | "live";
+}
 
 export class CatalogProviderBAdapter implements ProductProvider {
   id = "provider_b";
   name = "Catalog provider B";
+  kind: "LIVE" | "DEMO" | "UNCONFIGURED";
   shouldTimeout = false;
 
-  constructor(options?: {
-    apiKey?: string;
-    endpoint?: string;
-    shouldTimeout?: boolean;
-  }) {
-    if (options?.shouldTimeout !== undefined) {
-      this.shouldTimeout = options.shouldTimeout;
+  private apiKey?: string;
+  private endpoint?: string;
+  private mode: "demo" | "live";
+
+  constructor(options?: ProviderBOptions) {
+    this.apiKey = options?.apiKey;
+    this.endpoint = options?.endpoint;
+    this.shouldTimeout = options?.shouldTimeout ?? false;
+    this.mode = options?.mode ?? (this.apiKey && this.endpoint ? "live" : "demo");
+
+    if (this.mode === "live") {
+      this.kind = this.apiKey && this.endpoint ? "LIVE" : "UNCONFIGURED";
+    } else {
+      this.kind = "DEMO";
     }
+  }
+
+  isConfigured(): boolean {
+    if (this.mode === "live") {
+      return Boolean(this.apiKey && this.endpoint);
+    }
+    return true; // Demo mode is always configured with local fixtures
   }
 
   async search(
@@ -102,6 +124,10 @@ export class CatalogProviderBAdapter implements ProductProvider {
 
     if (signal.aborted) {
       throw new Error("Search aborted by user");
+    }
+
+    if (!this.isConfigured()) {
+      throw new Error("Provider B is unconfigured: missing credentials or endpoint");
     }
 
     if (this.shouldTimeout) {
@@ -152,8 +178,24 @@ export class CatalogProviderBAdapter implements ProductProvider {
   }
 
   async healthCheck(): Promise<ProviderHealth> {
+    if (!this.isConfigured()) {
+      return {
+        healthy: false,
+        isConfigured: false,
+        kind: "UNCONFIGURED",
+        message: "Provider B credentials or endpoint not configured",
+      };
+    }
+
     return {
       healthy: !this.shouldTimeout,
+      isConfigured: true,
+      kind: this.kind,
+      message: this.shouldTimeout
+        ? "Provider B simulated timeout"
+        : this.kind === "DEMO"
+        ? "Provider B running in demo fixture mode"
+        : "Provider B live API ready",
       latencyMs: 40,
     };
   }

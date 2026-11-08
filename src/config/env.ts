@@ -21,6 +21,11 @@ const EnvSchema = z
       .enum(["all", "seeded", "provider_a", "provider_b"])
       .default("all"),
     PRODUCT_PROVIDER_API_KEY: z.string().optional(),
+    PROVIDER_A_ENDPOINT: z.string().url().optional(),
+    PROVIDER_A_API_KEY: z.string().optional(),
+    PROVIDER_B_ENDPOINT: z.string().url().optional(),
+    PROVIDER_B_API_KEY: z.string().optional(),
+    PROVIDER_MODE: z.enum(["demo", "live"]).default("demo"),
     PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().default(6000),
     OFFER_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 

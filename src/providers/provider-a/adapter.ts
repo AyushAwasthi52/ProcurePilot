@@ -49,7 +49,7 @@ const PARTNER_A_CATALOG_OFFERS: ProviderOffer[] = [
     warrantyMonths: 36,
     returnWindowDays: 30,
     observedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
-    isDemo: false,
+    isDemo: true,
   },
   {
     providerId: "provider_a",
@@ -88,7 +88,7 @@ const PARTNER_A_CATALOG_OFFERS: ProviderOffer[] = [
     sellerRating: 4.1,
     ratingCount: 310,
     observedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    isDemo: false,
+    isDemo: true,
   },
   {
     providerId: "provider_a",
@@ -126,7 +126,7 @@ const PARTNER_A_CATALOG_OFFERS: ProviderOffer[] = [
     warrantyMonths: 24,
     returnWindowDays: 30,
     observedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-    isDemo: false,
+    isDemo: true,
   },
   {
     providerId: "provider_a",
@@ -164,18 +164,49 @@ const PARTNER_A_CATALOG_OFFERS: ProviderOffer[] = [
     warrantyMonths: 24,
     returnWindowDays: 30,
     observedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-    isDemo: false,
+    isDemo: true,
   },
 ];
+
+export interface ProviderAOptions {
+  apiKey?: string;
+  endpoint?: string;
+  mode?: "demo" | "live";
+}
 
 export class CatalogProviderAAdapter implements ProductProvider {
   id = "provider_a";
   name = "Catalog provider A";
+  kind: "LIVE" | "DEMO" | "UNCONFIGURED";
 
-  constructor(
-    private apiKey?: string,
-    private endpoint?: string
-  ) {}
+  private apiKey?: string;
+  private endpoint?: string;
+  private mode: "demo" | "live";
+
+  constructor(options?: ProviderAOptions | string, endpoint?: string) {
+    if (typeof options === "string" || endpoint !== undefined) {
+      this.apiKey = typeof options === "string" ? options : undefined;
+      this.endpoint = endpoint;
+      this.mode = this.apiKey && this.endpoint ? "live" : "demo";
+    } else {
+      this.apiKey = options?.apiKey;
+      this.endpoint = options?.endpoint;
+      this.mode = options?.mode ?? (this.apiKey && this.endpoint ? "live" : "demo");
+    }
+
+    if (this.mode === "live") {
+      this.kind = this.apiKey && this.endpoint ? "LIVE" : "UNCONFIGURED";
+    } else {
+      this.kind = "DEMO";
+    }
+  }
+
+  isConfigured(): boolean {
+    if (this.mode === "live") {
+      return Boolean(this.apiKey && this.endpoint);
+    }
+    return true; // Demo mode is always configured with local fixtures
+  }
 
   async search(
     input: ProviderSearchInput,
@@ -187,8 +218,12 @@ export class CatalogProviderAAdapter implements ProductProvider {
       throw new Error("Search aborted by user");
     }
 
+    if (!this.isConfigured()) {
+      throw new Error("Provider A is unconfigured: missing credentials or endpoint");
+    }
+
     // If live API credentials are configured, query permitted live partner API
-    if (this.apiKey && this.endpoint) {
+    if (this.mode === "live" && this.apiKey && this.endpoint) {
       const url = new URL(this.endpoint);
       url.searchParams.set("q", input.query);
 
@@ -207,7 +242,7 @@ export class CatalogProviderAAdapter implements ProductProvider {
       const data = await res.json();
       return {
         providerId: this.id,
-        offers: data.offers ?? [],
+        offers: (data.offers ?? []).map((o: ProviderOffer) => ({ ...o, isDemo: false })),
         latencyMs: Date.now() - start,
       };
     }
@@ -257,8 +292,23 @@ export class CatalogProviderAAdapter implements ProductProvider {
   }
 
   async healthCheck(): Promise<ProviderHealth> {
+    if (!this.isConfigured()) {
+      return {
+        healthy: false,
+        isConfigured: false,
+        kind: "UNCONFIGURED",
+        message: "Provider A credentials or endpoint not configured",
+      };
+    }
+
     return {
       healthy: true,
+      isConfigured: true,
+      kind: this.kind,
+      message:
+        this.kind === "DEMO"
+          ? "Provider A running in demo fixture mode"
+          : "Provider A live API ready",
       latencyMs: 30,
     };
   }

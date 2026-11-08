@@ -56,6 +56,24 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       }
     );
 
+    // Update DB record upon completion (background or sync)
+    searchPromise
+      .then(async (result) => {
+        try {
+          await db.searchRun.update({
+            where: { id: searchRunId },
+            data: {
+              status: result.status,
+              completedAt: result.completedAt ?? new Date(),
+              providerOutcomes: result.providerOutcomes as object,
+            },
+          });
+        } catch {
+          // DB offline fallback
+        }
+      })
+      .catch(() => {});
+
     // If client requested immediate execution (e.g. non-streaming or tests)
     const syncWait = req.headers.get("x-sync-search") === "true";
     if (syncWait) {
@@ -87,6 +105,51 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         },
       }
     );
+  } catch (error) {
+    return createErrorResponse(error, requestId);
+  }
+}
+
+export async function GET(req: NextRequest, { params }: RouteParams) {
+  const requestId = req.headers.get("x-request-id") || `req_${Date.now()}`;
+
+  try {
+    const user = await requireSession(req);
+    const { id } = await params;
+    const purchaseRequest = await getPurchaseRequestById(id);
+
+    if (!purchaseRequest) {
+      throw new NotFoundError("Purchase request");
+    }
+
+    assertOwnership(user.id, purchaseRequest.userId, "Purchase request");
+
+    // 1. Check orchestrator memory
+    const runResult = searchOrchestrator.getLatestRunForRequest(id);
+    if (runResult) {
+      return NextResponse.json(runResult, {
+        status: 200,
+        headers: { "x-request-id": requestId },
+      });
+    }
+
+    // 2. Check DB
+    try {
+      const dbRun = await db.searchRun.findFirst({
+        where: { requestId: id },
+        orderBy: { startedAt: "desc" },
+      });
+      if (dbRun) {
+        return NextResponse.json(dbRun, {
+          status: 200,
+          headers: { "x-request-id": requestId },
+        });
+      }
+    } catch {
+      // DB offline fallback
+    }
+
+    throw new NotFoundError("Search run for this purchase request");
   } catch (error) {
     return createErrorResponse(error, requestId);
   }

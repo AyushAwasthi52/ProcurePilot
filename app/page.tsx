@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { ProvenanceChip } from "@/components/ui/ProvenanceChip";
 import { PurchaseBrief } from "@/src/ai/schemas/brief";
 import { ClarificationQuestion } from "@/src/ai/schemas/clarification";
+import { getCsrfHeaders } from "@/src/auth/client-csrf";
 
 const SAMPLE_PROMPTS = [
   {
@@ -50,6 +51,14 @@ const SAMPLE_PROMPTS = [
   },
 ];
 
+interface AssociatedInput {
+  prompt: string;
+  region: string;
+  currency: string;
+  quantity: number;
+  urgency: string;
+}
+
 export default function HomePage() {
   const router = useRouter();
 
@@ -62,6 +71,9 @@ export default function HomePage() {
   const [quantity, setQuantity] = useState(1);
   const [urgency, setUrgency] = useState<"low" | "normal" | "urgent">("normal");
 
+  // Associated input of current analysis to ensure strict synchronization
+  const [associatedInput, setAssociatedInput] = useState<AssociatedInput | null>(null);
+
   // Extracted brief state
   const [requestId, setRequestId] = useState<string | null>(null);
   const [brief, setBrief] = useState<PurchaseBrief | null>(null);
@@ -70,49 +82,176 @@ export default function HomePage() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Auto-analyze prompt to produce checkable brief
-  const analyzePrompt = async (promptText: string, reqRegion = region, reqCurrency = currency) => {
-    if (!promptText || promptText.trim().length < 5) return;
+  // Request sequencing and abort controllers for race-condition prevention
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const latestSequenceRef = useRef<number>(0);
+  const isMountedRef = useRef<boolean>(true);
+
+  const invalidateAnalysis = () => {
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+    setRequestId(null);
+    setBrief(null);
+    setClarification(null);
+    setSelectedClarificationOption(null);
+    setAssociatedInput(null);
+    setAnalysisError(null);
+    setSubmitError(null);
+  };
+
+  // Safe unmount handling
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Analyze prompt to produce checkable brief
+  const analyzePrompt = async (
+    promptText: string,
+    reqRegion = region,
+    reqCurrency = currency,
+    reqQuantity = quantity,
+    reqUrgency = urgency
+  ) => {
+    if (!promptText || promptText.trim().length < 5) {
+      invalidateAnalysis();
+      return;
+    }
+
+    // Abort previous in-flight analysis
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    activeAbortControllerRef.current = abortController;
+    const currentSeq = ++latestSequenceRef.current;
+
     setIsAnalyzing(true);
+    setAnalysisError(null);
+
     try {
+      const csrfHeaders = await getCsrfHeaders();
       const res = await fetch("/api/purchase-requests", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-test-skip-csrf": "true",
+          ...csrfHeaders,
         },
         body: JSON.stringify({
           rawPrompt: promptText,
           region: reqRegion,
           currency: reqCurrency,
+          quantity: reqQuantity,
+          urgency: reqUrgency,
         }),
+        signal: abortController.signal,
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error?.message || "Failed to analyze purchase request");
+      }
+
+      const data = await res.json();
+
+      // Only apply state if this is still the newest active request
+      if (currentSeq === latestSequenceRef.current && isMountedRef.current) {
         setRequestId(data.id);
         setBrief(data.brief);
         setClarification(data.clarificationQuestion);
         setSelectedClarificationOption(null);
+        setAssociatedInput({
+          prompt: promptText,
+          region: reqRegion,
+          currency: reqCurrency,
+          quantity: reqQuantity,
+          urgency: reqUrgency,
+        });
+        setAnalysisError(null);
       }
-    } catch (err) {
-      console.error("Failed to analyze brief:", err);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return; // Ignore intentional cancellation
+      }
+      if (currentSeq === latestSequenceRef.current && isMountedRef.current) {
+        setAnalysisError(err instanceof Error ? err.message : "Failed to analyze prompt");
+        setRequestId(null);
+        setBrief(null);
+        setClarification(null);
+        setAssociatedInput(null);
+      }
     } finally {
-      setIsAnalyzing(false);
+      if (currentSeq === latestSequenceRef.current && isMountedRef.current) {
+        setIsAnalyzing(false);
+      }
     }
   };
 
-  // Initial load: parse default prompt
+  // Debounced auto-analysis when input changes
   useEffect(() => {
-    analyzePrompt(prompt, region, currency);
-  }, []);
+    if (prompt.trim().length < 5) return;
+
+    // Check if current input already matches what was analyzed
+    if (
+      associatedInput &&
+      associatedInput.prompt === prompt &&
+      associatedInput.region === region &&
+      associatedInput.currency === currency &&
+      associatedInput.quantity === quantity &&
+      associatedInput.urgency === urgency
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      analyzePrompt(prompt, region, currency, quantity, urgency);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [prompt, region, currency, quantity, urgency]);
+
+  const handlePromptChange = (newPrompt: string) => {
+    setPrompt(newPrompt);
+    invalidateAnalysis();
+  };
+
+  const handleRegionChange = (newRegion: string) => {
+    setRegion(newRegion);
+    invalidateAnalysis();
+  };
+
+  const handleCurrencyChange = (newCurrency: string) => {
+    setCurrency(newCurrency);
+    invalidateAnalysis();
+  };
+
+  const handleQuantityChange = (newQty: number) => {
+    setQuantity(newQty);
+    invalidateAnalysis();
+  };
+
+  const handleUrgencyChange = (newUrgency: "low" | "normal" | "urgent") => {
+    setUrgency(newUrgency);
+    invalidateAnalysis();
+  };
 
   const handleSelectSample = (sample: (typeof SAMPLE_PROMPTS)[0]) => {
+    invalidateAnalysis();
     setPrompt(sample.prompt);
     setRegion(sample.region);
     setCurrency(sample.currency);
-    analyzePrompt(sample.prompt, sample.region, sample.currency);
+    analyzePrompt(sample.prompt, sample.region, sample.currency, quantity, urgency);
   };
 
   const handleAnswerClarification = async (optionId: string) => {
@@ -120,11 +259,12 @@ export default function HomePage() {
     setSelectedClarificationOption(optionId);
 
     try {
+      const csrfHeaders = await getCsrfHeaders();
       const res = await fetch(`/api/purchase-requests/${requestId}/clarifications`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-test-skip-csrf": "true",
+          ...csrfHeaders,
         },
         body: JSON.stringify({
           questionId: clarification.id,
@@ -135,7 +275,6 @@ export default function HomePage() {
       if (res.ok) {
         const data = await res.json();
         setBrief(data.brief);
-        // Remove or update clarification question
         setClarification(null);
       }
     } catch (err) {
@@ -151,16 +290,17 @@ export default function HomePage() {
     const updatedBrief = { ...brief, preferences: updatedPreferences };
     setBrief(updatedBrief);
 
-    // Save updated brief in DB if request exists
     if (requestId) {
-      fetch(`/api/purchase-requests/${requestId}/brief`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          "x-test-skip-csrf": "true",
-        },
-        body: JSON.stringify(updatedBrief),
-      }).catch(console.error);
+      getCsrfHeaders().then((csrfHeaders) => {
+        fetch(`/api/purchase-requests/${requestId}/brief`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...csrfHeaders,
+          },
+          body: JSON.stringify(updatedBrief),
+        }).catch(console.error);
+      });
     }
   };
 
@@ -171,61 +311,97 @@ export default function HomePage() {
     setBrief(updatedBrief);
 
     if (requestId) {
-      fetch(`/api/purchase-requests/${requestId}/brief`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          "x-test-skip-csrf": "true",
-        },
-        body: JSON.stringify(updatedBrief),
-      }).catch(console.error);
+      getCsrfHeaders().then((csrfHeaders) => {
+        fetch(`/api/purchase-requests/${requestId}/brief`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...csrfHeaders,
+          },
+          body: JSON.stringify(updatedBrief),
+        }).catch(console.error);
+      });
     }
   };
 
   const handleSearch = async () => {
+    if (isSubmitting) return; // Prevent duplicate submission
+    setSubmitError(null);
+
+    if (!prompt || prompt.trim().length < 5) {
+      setSubmitError("Please describe your purchase requirement (minimum 5 characters).");
+      return;
+    }
+
+    // Cancel any background analysis in progress
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+
     setIsSubmitting(true);
     try {
-      let activeReqId = requestId;
+      let activeReqId: string | null = null;
 
-      // If not yet analyzed or prompt changed
-      if (!activeReqId) {
+      // Reuse request ONLY if current inputs match the analyzed request exactly and analysis is complete
+      const isMatching =
+        requestId &&
+        associatedInput &&
+        associatedInput.prompt === prompt &&
+        associatedInput.region === region &&
+        associatedInput.currency === currency &&
+        associatedInput.quantity === quantity &&
+        associatedInput.urgency === urgency &&
+        !isAnalyzing;
+
+      if (isMatching) {
+        activeReqId = requestId;
+      } else {
+        // Create request for the exact current form state
+        const csrfHeaders = await getCsrfHeaders();
         const res = await fetch("/api/purchase-requests", {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-test-skip-csrf": "true",
+            ...csrfHeaders,
           },
           body: JSON.stringify({
             rawPrompt: prompt,
             region,
             currency,
+            quantity,
+            urgency,
           }),
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          activeReqId = data.id;
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || "Failed to create purchase request");
         }
+
+        const data = await res.json();
+        activeReqId = data.id;
+        setRequestId(data.id);
+        setBrief(data.brief);
       }
 
-      if (activeReqId) {
-        router.push(`/compare?requestId=${activeReqId}`);
-      } else {
-        router.push("/compare");
+      if (!activeReqId) {
+        throw new Error("Unable to establish purchase request ID");
       }
-    } catch {
-      router.push("/compare");
+
+      // Navigate to compare screen with the verified request ID
+      router.push(`/compare?requestId=${activeReqId}`);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to proceed to search");
+      // NEVER navigate to /compare on failed request creation
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleStartNewRequest = () => {
+    invalidateAnalysis();
     setPrompt("");
-    setRequestId(null);
-    setBrief(null);
-    setClarification(null);
-    setSelectedClarificationOption(null);
   };
 
   const formatPriceMinor = (minor?: number, curr = currency) => {
@@ -303,8 +479,7 @@ export default function HomePage() {
               <div className="relative mb-4">
                 <textarea
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onBlur={() => analyzePrompt(prompt, region, currency)}
+                  onChange={(e) => handlePromptChange(e.target.value)}
                   rows={4}
                   className="w-full bg-[#FAF8F5] rounded-xl p-4 border border-[#E2DDD0] text-[#16191C] text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#0E5A55] resize-none"
                   placeholder="Describe your purchase: laptops, headphones, phones, monitors, appliances, furniture, office equipment..."
@@ -319,10 +494,7 @@ export default function HomePage() {
                   </label>
                   <select
                     value={region}
-                    onChange={(e) => {
-                      setRegion(e.target.value);
-                      analyzePrompt(prompt, e.target.value, currency);
-                    }}
+                    onChange={(e) => handleRegionChange(e.target.value)}
                     className="w-full text-xs bg-[#FAF8F5] border border-[#E2DDD0] rounded-lg px-2.5 py-1.5 text-[#16191C] font-medium"
                   >
                     <option value="US">US (United States)</option>
@@ -338,10 +510,7 @@ export default function HomePage() {
                   </label>
                   <select
                     value={currency}
-                    onChange={(e) => {
-                      setCurrency(e.target.value);
-                      analyzePrompt(prompt, region, e.target.value);
-                    }}
+                    onChange={(e) => handleCurrencyChange(e.target.value)}
                     className="w-full text-xs bg-[#FAF8F5] border border-[#E2DDD0] rounded-lg px-2.5 py-1.5 text-[#16191C] font-medium"
                   >
                     <option value="USD">USD ($)</option>
@@ -359,7 +528,7 @@ export default function HomePage() {
                     min={1}
                     max={100}
                     value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    onChange={(e) => handleQuantityChange(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     className="w-full text-xs bg-[#FAF8F5] border border-[#E2DDD0] rounded-lg px-2.5 py-1.5 text-[#16191C] font-medium"
                   />
                 </div>
@@ -370,7 +539,7 @@ export default function HomePage() {
                   </label>
                   <select
                     value={urgency}
-                    onChange={(e) => setUrgency(e.target.value as "low" | "normal" | "urgent")}
+                    onChange={(e) => handleUrgencyChange(e.target.value as "low" | "normal" | "urgent")}
                     className="w-full text-xs bg-[#FAF8F5] border border-[#E2DDD0] rounded-lg px-2.5 py-1.5 text-[#16191C] font-medium"
                   >
                     <option value="normal">Normal</option>
@@ -379,6 +548,18 @@ export default function HomePage() {
                   </select>
                 </div>
               </div>
+
+              {/* Error messages if any */}
+              {analysisError && (
+                <div className="bg-[#FFF0F0] border border-[#FFD0D0] text-[#A00000] p-3 rounded-xl text-xs mb-4">
+                  {analysisError}
+                </div>
+              )}
+              {submitError && (
+                <div className="bg-[#FFF0F0] border border-[#FFD0D0] text-[#A00000] p-3 rounded-xl text-xs mb-4">
+                  {submitError}
+                </div>
+              )}
 
               {/* Dynamic Category Clarification Card (Appears only if needed) */}
               {clarification && (
@@ -456,7 +637,7 @@ export default function HomePage() {
                       Category
                     </span>
                     <span className="text-sm font-medium text-[#16191C]">
-                      {brief?.category || "Detecting..."}
+                      {brief?.category || (isAnalyzing ? "Analyzing category..." : "Awaiting input")}
                     </span>
                   </div>
                   <ProvenanceChip kind="inferred" />
@@ -469,7 +650,7 @@ export default function HomePage() {
                       Budget Cap
                     </span>
                     <span className="text-sm font-medium text-[#16191C]">
-                      {formatPriceMinor(brief?.budget?.amountMinor, brief?.budget?.currency)} &middot;{" "}
+                      {brief ? formatPriceMinor(brief.budget?.amountMinor, brief.budget?.currency) : "$0.00"} &middot;{" "}
                       {brief?.budget?.includesShipping ? "shipping included" : "shipping excluded"}
                     </span>
                   </div>

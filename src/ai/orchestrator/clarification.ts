@@ -3,7 +3,7 @@ import {
   ClarificationQuestion,
   ClarificationAnswer,
 } from "../schemas/clarification";
-import { getCategoryDefinition } from "../categories";
+import { getCategoryDefinition, GENERIC_CATEGORY } from "../categories";
 
 export function evaluateClarificationPolicy(
   brief: PurchaseBrief
@@ -15,6 +15,11 @@ export function evaluateClarificationPolicy(
 
   if (!unconfirmedMustHave) {
     return null;
+  }
+
+  // 1. Explicit Category ambiguity
+  if (unconfirmedMustHave.attribute === "category" && GENERIC_CATEGORY.clarificationQuestions.category) {
+    return GENERIC_CATEGORY.clarificationQuestions.category;
   }
 
   const categoryDef = getCategoryDefinition(brief.category);
@@ -57,6 +62,23 @@ export function applyClarificationAnswer(
   answer: ClarificationAnswer
 ): PurchaseBrief {
   const updated = structuredClone(brief);
+
+  // 0. Category Clarification
+  if (answer.questionId === "clarify_category") {
+    const categoryMap: Record<string, string> = {
+      opt_cat_laptop: "Laptop",
+      opt_cat_headphones: "Headphones",
+      opt_cat_smartphone: "Smartphone",
+      opt_cat_monitor: "Monitor",
+      opt_cat_general: "General",
+    };
+    const chosenCategory = categoryMap[answer.selectedOptionId] || "General";
+    updated.category = chosenCategory;
+    const newCatDef = getCategoryDefinition(chosenCategory);
+    updated.preferences = newCatDef.defaultPreferences.map((p) => ({ ...p }));
+    updated.mustHave = updated.mustHave.filter((m) => m.attribute !== "category");
+    return updated;
+  }
 
   // 1. Laptop CUDA
   if (answer.questionId === "clarify_cuda_ml") {

@@ -188,6 +188,78 @@ export class MockLlmClient implements LlmClient {
           label: "Refresh Rate ≥ 120Hz",
         });
       }
+    } else {
+      // General / unfamiliar procurement items: extract concrete attributes
+      if (prompt.includes("lumbar")) {
+        mustHave.push({
+          attribute: "lumbarSupport",
+          operator: "eq",
+          value: true,
+          confirmed: true,
+          provenance: "you-said",
+          label: "Adjustable Lumbar Support",
+        });
+      }
+      if (prompt.includes("armrest")) {
+        mustHave.push({
+          attribute: "armrests",
+          operator: "eq",
+          value: true,
+          confirmed: true,
+          provenance: "you-said",
+          label: "Adjustable Armrests",
+        });
+      }
+      if (prompt.includes("mesh")) {
+        mustHave.push({
+          attribute: "material",
+          operator: "eq",
+          value: "mesh",
+          confirmed: true,
+          provenance: "you-said",
+          label: "Mesh Material",
+        });
+      }
+      if (prompt.includes("dual motor")) {
+        mustHave.push({
+          attribute: "dualMotor",
+          operator: "eq",
+          value: true,
+          confirmed: true,
+          provenance: "you-said",
+          label: "Dual Motor",
+        });
+      }
+      if (prompt.includes("usb-c") || prompt.includes("type-c")) {
+        mustHave.push({
+          attribute: "connectivity",
+          operator: "eq",
+          value: "USB-C",
+          confirmed: true,
+          provenance: "you-said",
+          label: "USB-C Connectivity",
+        });
+      }
+      if (prompt.includes("wireless") || prompt.includes("bluetooth")) {
+        mustHave.push({
+          attribute: "wireless",
+          operator: "eq",
+          value: true,
+          confirmed: true,
+          provenance: "you-said",
+          label: "Wireless Connectivity",
+        });
+      }
+      if (prompt.includes("ergonomic")) {
+        mustHave.push({
+          attribute: "ergonomics",
+          operator: "eq",
+          value: true,
+          confirmed: true,
+          provenance: "you-said",
+          label: "Ergonomic Design",
+        });
+      }
     }
 
     // 6. Use cases extraction
@@ -217,6 +289,41 @@ export class MockLlmClient implements LlmClient {
     // 7. Preference weights from category definition
     const preferences = categoryDef.defaultPreferences.map((p) => ({ ...p }));
 
+    // 8. Quantity extraction
+    let detectedQty = 1;
+    const qtyMatch = prompt.match(/\b(?:quantity|qty)\s*[:=]?\s*(\d+)\b/i) || prompt.match(/\b(\d+)\s*x\b/i);
+    if (qtyMatch) {
+      detectedQty = parseInt(qtyMatch[1], 10);
+    }
+
+    // 9. Region extraction
+    let detectedRegion = "US";
+    if (/\b(?:in\s+)?(uk|gb)\b/i.test(prompt) || currency === "GBP") {
+      detectedRegion = "UK";
+    } else if (/\b(?:in\s+)?(eu|europe|germany|france)\b/i.test(prompt) || currency === "EUR") {
+      detectedRegion = "EU";
+    } else if (/\b(?:in\s+)?(ca|canada)\b/i.test(prompt) || currency === "CAD") {
+      detectedRegion = "CA";
+    }
+
+    const isAmbiguousCategory =
+      category === "General" &&
+      (prompt.includes("portable device") ||
+        prompt.includes("gear") ||
+        prompt.includes("equipment for work") ||
+        prompt.includes("setup under"));
+
+    if (isAmbiguousCategory) {
+      mustHave.push({
+        attribute: "category",
+        operator: "eq",
+        value: "General",
+        confirmed: false,
+        provenance: "confirm",
+        label: "Product Category",
+      });
+    }
+
     const result: PurchaseBrief = {
       category,
       query: `${category} for ${useCases.join(" and ")}`,
@@ -228,11 +335,15 @@ export class MockLlmClient implements LlmClient {
       },
       mustHave,
       preferences,
-      region: "US",
-      quantity: 1,
+      region: detectedRegion,
+      quantity: detectedQty,
       urgency: prompt.includes("urgent") ? "urgent" : "normal",
       assumptions: [
-        { field: "category", value: category, origin: "inferred" },
+        {
+          field: "category",
+          value: category,
+          origin: "inferred",
+        },
       ],
       schemaVersion: 3,
     };

@@ -11,6 +11,11 @@ import { SEED_DATA } from "@/prisma/seed";
 export class SeededDemoCatalogAdapter implements ProductProvider {
   id = "seeded_demo";
   name = "Seeded demo catalog";
+  kind = "DEMO" as const;
+
+  isConfigured(): boolean {
+    return true;
+  }
 
   async search(
     input: ProviderSearchInput,
@@ -101,6 +106,9 @@ export class SeededDemoCatalogAdapter implements ProductProvider {
   async healthCheck(): Promise<ProviderHealth> {
     return {
       healthy: true,
+      isConfigured: true,
+      kind: "DEMO",
+      message: "Seeded local catalog ready",
       latencyMs: 5,
     };
   }

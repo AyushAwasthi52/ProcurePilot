@@ -11,6 +11,8 @@ const CreateRequestSchema = z.object({
   rawPrompt: z.string().min(5, "Prompt must be at least 5 characters").max(2000),
   region: z.string().length(2).optional(),
   currency: z.string().length(3).optional(),
+  quantity: z.number().int().positive().optional(),
+  urgency: z.enum(["low", "normal", "urgent"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -30,11 +32,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { rawPrompt, region, currency } = parseResult.data;
+    const { rawPrompt, region, currency, quantity, urgency } = parseResult.data;
 
     // AI Requirement Extraction (structured output + Zod validation)
     const { brief, clarificationQuestion } = await extractRequirementsFromPrompt(
-      rawPrompt
+      rawPrompt,
+      { region, currency, quantity, urgency }
     );
 
     const purchaseRequest = await createPurchaseRequest({

@@ -105,3 +105,4 @@ describe("Environment Configuration & Zod Validation (Section 1)", () => {
     expect(fallbackDirect.DIRECT_URL).toBe(baseValidEnv.DATABASE_URL);
   });
 });
+

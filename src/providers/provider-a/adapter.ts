@@ -90,6 +90,82 @@ const PARTNER_A_CATALOG_OFFERS: ProviderOffer[] = [
     observedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     isDemo: false,
   },
+  {
+    providerId: "provider_a",
+    providerOfferId: "ofr_pa_sony_xm5",
+    productTitle: "Sony WH-1000XM5 Wireless Noise-Cancelling Headphones",
+    brand: "Sony",
+    category: "Headphones",
+    attributes: {
+      anc: true,
+      batteryHours: 30,
+      wireless: true,
+      multipointBluetooth: true,
+      formFactor: "over-ear",
+      warrantyMonths: 24,
+      returnWindowDays: 30,
+      sellerRating: 4.8,
+      ratingCount: 3120,
+      identityVerified: true,
+    },
+    merchantName: "Brightline Electronics",
+    merchantId: "mer_brightline",
+    price: {
+      amountMinor: 34900,
+      currency: "USD",
+    },
+    shipping: {
+      status: "KNOWN",
+      amountMinor: 0,
+      currency: "USD",
+    },
+    availability: "in_stock",
+    productUrl: "https://brightline.example/sony-wh-1000xm5",
+    sellerRating: 4.8,
+    ratingCount: 3120,
+    warrantyMonths: 24,
+    returnWindowDays: 30,
+    observedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    isDemo: false,
+  },
+  {
+    providerId: "provider_a",
+    providerOfferId: "ofr_pa_pixel9pro",
+    productTitle: "Google Pixel 9 Pro 128GB",
+    brand: "Google",
+    category: "Smartphone",
+    attributes: {
+      os: "Android",
+      storageGb: 128,
+      screenInches: 6.3,
+      cameraScore: 95,
+      batteryMah: 4700,
+      warrantyMonths: 24,
+      returnWindowDays: 30,
+      sellerRating: 4.8,
+      ratingCount: 1450,
+      identityVerified: true,
+    },
+    merchantName: "Brightline Electronics",
+    merchantId: "mer_brightline",
+    price: {
+      amountMinor: 99900,
+      currency: "USD",
+    },
+    shipping: {
+      status: "KNOWN",
+      amountMinor: 0,
+      currency: "USD",
+    },
+    availability: "in_stock",
+    productUrl: "https://brightline.example/pixel-9-pro",
+    sellerRating: 4.8,
+    ratingCount: 1450,
+    warrantyMonths: 24,
+    returnWindowDays: 30,
+    observedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    isDemo: false,
+  },
 ];
 
 export class CatalogProviderAAdapter implements ProductProvider {
@@ -145,15 +221,33 @@ export class CatalogProviderAAdapter implements ProductProvider {
       });
     });
 
-    const queryLower = input.query.toLowerCase();
-    const matchedOffers = PARTNER_A_CATALOG_OFFERS.filter(
-      (o) =>
-        o.productTitle.toLowerCase().includes(queryLower) ||
-        (o.category ? o.category.toLowerCase().includes(queryLower) : false) ||
-        queryLower.includes("laptop") ||
-        queryLower.includes("programming") ||
-        queryLower.includes("ml")
-    );
+    const queryLower = (input.query || "").toLowerCase();
+    const targetCat = input.category ? input.category.toLowerCase().trim() : undefined;
+    const queryWords = queryLower.split(/\s+/).filter((w) => w.length > 2);
+
+    const matchedOffers = PARTNER_A_CATALOG_OFFERS.filter((o) => {
+      const oCat = (o.category || "").toLowerCase();
+      const oTitle = o.productTitle.toLowerCase();
+      const oBrand = (o.brand || "").toLowerCase();
+
+      if (targetCat && targetCat !== "general") {
+        if (oCat !== targetCat && !targetCat.includes(oCat) && !oCat.includes(targetCat)) {
+          return false;
+        }
+      }
+
+      if (queryWords.length > 0) {
+        return queryWords.some(
+          (w) =>
+            oTitle.includes(w) ||
+            oBrand.includes(w) ||
+            oCat.includes(w) ||
+            (targetCat && w.includes(targetCat))
+        );
+      }
+
+      return targetCat ? oCat === targetCat : true;
+    });
 
     return {
       providerId: this.id,

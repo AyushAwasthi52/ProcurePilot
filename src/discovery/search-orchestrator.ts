@@ -203,6 +203,16 @@ export class SearchOrchestrator {
     return this.completedRuns.get(runId) ?? null;
   }
 
+  findOfferById(offerId: string): NormalizedOffer | null {
+    for (const run of this.completedRuns.values()) {
+      const match = run.offers.find(
+        (o) => o.id === offerId || o.providerOfferId === offerId
+      );
+      if (match) return match;
+    }
+    return null;
+  }
+
   clear(): void {
     this.activeRuns.clear();
     this.completedRuns.clear();

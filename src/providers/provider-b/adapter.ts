@@ -39,6 +39,44 @@ const PARTNER_B_CATALOG_OFFERS: ProviderOffer[] = [
     observedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
     isDemo: false,
   },
+  {
+    providerId: "provider_b",
+    providerOfferId: "ofr_pb_bose_qc",
+    productTitle: "Bose QuietComfort Ultra Wireless Headphones",
+    brand: "Bose",
+    category: "Headphones",
+    attributes: {
+      anc: true,
+      batteryHours: 24,
+      wireless: true,
+      multipointBluetooth: true,
+      formFactor: "over-ear",
+      warrantyMonths: 24,
+      returnWindowDays: 30,
+      sellerRating: 4.7,
+      ratingCount: 1540,
+      identityVerified: true,
+    },
+    merchantName: "Northgate Direct",
+    merchantId: "mer_northgate",
+    price: {
+      amountMinor: 37900,
+      currency: "USD",
+    },
+    shipping: {
+      status: "KNOWN",
+      amountMinor: 0,
+      currency: "USD",
+    },
+    availability: "in_stock",
+    productUrl: "https://northgate.example/bose-qc-ultra",
+    sellerRating: 4.7,
+    ratingCount: 1540,
+    warrantyMonths: 24,
+    returnWindowDays: 30,
+    observedAt: new Date(Date.now() - 1 * 60 * 1000).toISOString(),
+    isDemo: false,
+  },
 ];
 
 export class CatalogProviderBAdapter implements ProductProvider {
@@ -78,15 +116,33 @@ export class CatalogProviderBAdapter implements ProductProvider {
       });
     }
 
-    const queryLower = input.query.toLowerCase();
-    const matchedOffers = PARTNER_B_CATALOG_OFFERS.filter(
-      (o) =>
-        o.productTitle.toLowerCase().includes(queryLower) ||
-        (o.category ? o.category.toLowerCase().includes(queryLower) : false) ||
-        queryLower.includes("laptop") ||
-        queryLower.includes("programming") ||
-        queryLower.includes("ml")
-    );
+    const queryLower = (input.query || "").toLowerCase();
+    const targetCat = input.category ? input.category.toLowerCase().trim() : undefined;
+    const queryWords = queryLower.split(/\s+/).filter((w) => w.length > 2);
+
+    const matchedOffers = PARTNER_B_CATALOG_OFFERS.filter((o) => {
+      const oCat = (o.category || "").toLowerCase();
+      const oTitle = o.productTitle.toLowerCase();
+      const oBrand = (o.brand || "").toLowerCase();
+
+      if (targetCat && targetCat !== "general") {
+        if (oCat !== targetCat && !targetCat.includes(oCat) && !oCat.includes(targetCat)) {
+          return false;
+        }
+      }
+
+      if (queryWords.length > 0) {
+        return queryWords.some(
+          (w) =>
+            oTitle.includes(w) ||
+            oBrand.includes(w) ||
+            oCat.includes(w) ||
+            (targetCat && w.includes(targetCat))
+        );
+      }
+
+      return targetCat ? oCat === targetCat : true;
+    });
 
     return {
       providerId: this.id,

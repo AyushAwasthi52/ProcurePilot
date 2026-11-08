@@ -13,6 +13,7 @@ export default defineConfig({
       DATABASE_URL: "postgresql://mock:mock@localhost:5432/mock",
       NODE_ENV: "test",
       AUTH_SECRET: "procurepilot-test-secret-at-least-32-chars-long",
+      AI_PROVIDER: "mock",
     },
   },
   resolve: {

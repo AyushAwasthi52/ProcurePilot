@@ -1,6 +1,6 @@
 # ProcurePilot — Implementation Status & Architecture Notes
 
-## Current Implementation State (Phases 0 – 9)
+## Current Implementation State (Phases 0 – 10)
 
 - **Phase 0 — Project Foundations:** Core Next.js 16 + React 19 app router scaffold, Tailwind CSS design system tokens, pure domain types, strict schemas.
 - **Phase 1 — Discovery Engine & Normalization:** ProductProvider adapter interfaces, canonical normalizers, bounded multi-provider orchestration, resilient fallback handling.
@@ -12,6 +12,27 @@
 - **Phase 7 — Webhook Reconciliation & Signature Verification:** PayPal webhook processing, digital signature verification (`/v1/notifications/verify-webhook-signature`), immutable audit trails.
 - **Phase 8 — Security Hardening, Rate Limiting & Lifecycle Verification:** Security headers middleware, IP-based sliding-window rate limiters, 10-stage end-to-end lifecycle verification test.
 - **Phase 9 — Configuration & Integration Audit:** Centralized Zod environment validation (`src/config/env.ts`), provider-neutral LLM client factory (`GeminiLlmClient` & `MockLlmClient`), decoupled partner catalog adapters, explicit simulated payment controls (`PAYMENTS_SIMULATED`).
+- **Category-Agnostic Transformation:** Transformed application from laptop-specific demo into generic multi-category purchasing intelligence system supporting Laptops, Headphones, Smartphones, Monitors, Furniture, and arbitrary products. Dynamic brief extraction, category-specific clarifications, multi-category discovery, dynamic comparison without static mock candidates, and plan assembly.
+
+---
+
+## Category-Agnostic Architecture Details
+
+### 1. Dynamic Category Registry (`src/ai/categories/`)
+- Declarative category definitions with aliases, typed attribute schemas, units, default preference weight distributions, and targeted clarification questions.
+- Built-in support for `Laptop` (CUDA clarification), `Headphones` (ANC clarification), `Smartphone` (OS ecosystem clarification), `Monitor` (Refresh rate clarification), and `General` procurement.
+
+### 2. Provider Discovery & Multi-Category Catalog
+- Expanded seeded catalog (`prisma/seed.ts`) with verified deterministic demo items across headphones, smartphones, and monitors alongside laptops, clearly labeled with `isDemo: true`.
+- Decoupled `SeededDemoCatalogAdapter`, `ProviderAAdapter`, and `ProviderBAdapter` to match based on user query tokens and detected category.
+- Graceful empty results handling returning 0 offers when querying non-existent inventory.
+
+### 3. Dynamic Comparison & Plan Creation
+- Fully eliminated static `CANDIDATES` array from `app/compare/page.tsx`.
+- Real-time evaluation via pure domain `evaluateAndRankOffers` against discovered offers.
+- Generalized `CandidateTable` to render category-appropriate key specifications.
+- Dynamic `ExcludedPanels` rendering actual over-budget and flagged offers.
+- Connected `searchOrchestrator` directly with `app/api/purchase-plans` to lock real discovered item snapshots into immutable SHA-256 purchase plans.
 
 ---
 
@@ -37,7 +58,7 @@
 2. **Package Engines Declaration ([`package.json`](package.json)):**
    - Added `"engines": { "node": ">=22.19.0" }` to explicitly declare Node LTS runtime compatibility requirements across all environments.
 3. **Integrity Verification:**
-   - 23 test suites, 103/103 tests passing locally.
+   - 24 test suites, 109/109 tests passing locally.
    - Clean TypeScript check (`npm run typecheck`).
    - Clean ESLint check (`npm run lint`).
    - Clean Next.js production build (`npm run build`).

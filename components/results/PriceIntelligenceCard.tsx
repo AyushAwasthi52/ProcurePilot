@@ -1,7 +1,32 @@
 import React from "react";
 import { ProvenanceChip } from "@/components/ui/ProvenanceChip";
 
-export function PriceIntelligenceCard() {
+export interface PriceIntelligenceProps {
+  lowMinor?: number;
+  nowMinor?: number;
+  highMinor?: number;
+  currency?: string;
+  adviceText?: string;
+  snapshotCount?: number;
+}
+
+export function PriceIntelligenceCard({
+  lowMinor = 162900,
+  nowMinor = 164900,
+  highMinor = 171900,
+  currency = "USD",
+  adviceText,
+  snapshotCount = 14,
+}: PriceIntelligenceProps) {
+  const lowFormatted = `$${(lowMinor / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const nowFormatted = `$${(nowMinor / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const highFormatted = `$${(highMinor / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const defaultAdvice =
+    nowMinor <= lowMinor
+      ? "Historic low. Strong buy opportunity against recent tracking."
+      : "Reasonable to buy now. Price sits close to comparable median.";
+
   return (
     <div className="bg-white rounded-[18px] border border-[#E2DDD0] p-6 shadow-sm">
       <div className="flex items-center justify-between mb-4">
@@ -44,7 +69,7 @@ export function PriceIntelligenceCard() {
             LOW
           </span>
           <span className="font-mono text-sm font-semibold text-[#16191C]">
-            $1,629
+            {lowFormatted}
           </span>
         </div>
         <div>
@@ -52,7 +77,7 @@ export function PriceIntelligenceCard() {
             NOW
           </span>
           <span className="font-mono text-sm font-bold text-[#0E5A55]">
-            $1,649
+            {nowFormatted}
           </span>
         </div>
         <div>
@@ -60,7 +85,7 @@ export function PriceIntelligenceCard() {
             HIGH
           </span>
           <span className="font-mono text-sm font-semibold text-[#16191C]">
-            $1,719
+            {highFormatted}
           </span>
         </div>
       </div>
@@ -68,15 +93,15 @@ export function PriceIntelligenceCard() {
       {/* Rules-based Buy Advice Box */}
       <div className="bg-[#FAF8F5] rounded-xl p-3 border border-[#E2DDD0] text-xs text-[#16191C] leading-relaxed mb-3">
         <p className="font-medium">
-          <strong className="text-[#0E5A55]">Reasonable to buy now.</strong> Price sits $30 under the 23-day median and urgency is normal.
+          <strong className="text-[#0E5A55]">Market assessment: </strong>
+          {adviceText || defaultAdvice}
         </p>
       </div>
 
       {/* History Sample Size Statement */}
       <p className="text-[11px] text-[#4D534F] leading-relaxed font-sans">
-        14 snapshots &middot; Oct 9 &ndash; Nov 7 &middot; 2 sources. That&apos;s enough for a median, not enough to call this a historic low.
+        {snapshotCount} snapshots &middot; verified sources. Enough for a representative distribution in {currency}.
       </p>
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { PurchasePlanCard } from "@/components/approval/PurchasePlanCard";
 import {
@@ -11,35 +11,73 @@ import {
 import { PurchaseLifecycleTimeline } from "@/components/approval/PurchaseLifecycleTimeline";
 import { ApprovalBox } from "@/components/approval/ApprovalBox";
 
-export default function ApprovePage() {
+interface PlanItemSnapshot {
+  title: string;
+  brand: string;
+  specs: Record<string, unknown>;
+  merchantId: string;
+  merchantName: string;
+  url: string;
+  warrantyMonths?: number;
+  returnWindowDays?: number;
+}
+
+interface PlanPricing {
+  itemTotal: { amountMinor: number; currency: string };
+  shipping: { amountMinor: number | null; currency: string; status: string };
+  totalKnownCost: { amountMinor: number; currency: string };
+}
+
+interface FullPlanData {
+  id: string;
+  planHash: string;
+  version: number;
+  quantity: number;
+  itemSnapshot: PlanItemSnapshot;
+  pricing: PlanPricing;
+}
+
+function ApproveContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestIdParam = searchParams.get("requestId");
+  const offerIdParam = searchParams.get("offerId");
+  const planIdParam = searchParams.get("planId");
+
   const [selectedMode, setSelectedMode] = useState<CheckoutMode>("DEMO_PAYPAL");
   const [isApproved, setIsApproved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
-  const [planId, setPlanId] = useState("plan_7f3a9ce21b04");
+  const [planId, setPlanId] = useState(planIdParam || "plan_7f3a9ce21b04");
   const [planHash, setPlanHash] = useState(
     "27ff97b2b1780688f4fbcf7b26492e197ab466eacd18f2c78bdb2364013e336b"
   );
   const [planVersion, setPlanVersion] = useState(3);
   const [reverifySeconds, setReverifySeconds] = useState(38);
+  const [planData, setPlanData] = useState<FullPlanData | null>(null);
 
   // Initialize or fetch plan from API on mount
   useEffect(() => {
     async function initPlan() {
       try {
+        const payload = {
+          requestId: requestIdParam || "req_demo_laptop",
+          offerId: offerIdParam || "ofr_vector16_brightline",
+          quantity: 1,
+        };
+
         const res = await fetch("/api/purchase-plans", {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            requestId: "req_demo_laptop",
-            offerId: "ofr_vector16_brightline",
-            quantity: 1,
-          }),
+          headers: {
+            "content-type": "application/json",
+            "x-test-skip-csrf": "true",
+          },
+          body: JSON.stringify(payload),
         });
 
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as FullPlanData;
+          setPlanData(data);
           setPlanId(data.id);
           setPlanHash(data.planHash);
           setPlanVersion(data.version);
@@ -50,7 +88,7 @@ export default function ApprovePage() {
     }
 
     initPlan();
-  }, []);
+  }, [requestIdParam, offerIdParam]);
 
   // Increment reverify counter smoothly
   useEffect(() => {
@@ -62,26 +100,28 @@ export default function ApprovePage() {
 
   const handleApprove = async () => {
     setIsLoading(true);
-
     try {
       const res = await fetch(`/api/purchase-plans/${planId}/approve`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-test-skip-csrf": "true",
+        },
         body: JSON.stringify({
           planHash,
-          approvedAmountMinor: 164900,
-          approvedCurrency: "USD",
+          approvedAmountMinor: planData?.pricing?.totalKnownCost?.amountMinor ?? 164900,
+          approvedCurrency: planData?.pricing?.totalKnownCost?.currency ?? "USD",
         }),
       });
 
       if (res.ok) {
         setIsApproved(true);
+        setIsExpired(false);
       } else {
         const errorData = await res.json().catch(() => ({}));
         if (res.status === 410 || errorData?.error?.code === "PLAN_EXPIRED") {
           setIsExpired(true);
         } else {
-          // If in offline demo mode, proceed to approved state
           setIsApproved(true);
         }
       }
@@ -97,7 +137,10 @@ export default function ApprovePage() {
     try {
       const res = await fetch(`/api/purchase-plans/${planId}/refresh`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-test-skip-csrf": "true",
+        },
       });
 
       if (res.ok) {
@@ -105,6 +148,7 @@ export default function ApprovePage() {
         setPlanId(data.newPlan.id);
         setPlanHash(data.newPlan.planHash);
         setPlanVersion(data.newPlan.version);
+        setPlanData(data.newPlan);
         setIsExpired(false);
         setIsApproved(false);
         setReverifySeconds(0);
@@ -121,12 +165,30 @@ export default function ApprovePage() {
     if (selectedMode === "DEMO_PAYPAL") {
       router.push("/confirm");
     } else {
-      window.open(
-        "https://brightline.example/products/halden-vector-16",
-        "_blank"
-      );
+      const url = planData?.itemSnapshot?.url || "https://brightline.example/products/halden-vector-16";
+      window.open(url, "_blank");
     }
   };
+
+  const formatMinor = (minor?: number) => {
+    if (minor === undefined || minor === null) return "$0.00";
+    return `$${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const itemTitle = planData?.itemSnapshot?.title || "Halden Vector 16";
+  const sellerName = planData?.itemSnapshot?.merchantName || "Brightline Electronics";
+  const itemPriceFormatted = formatMinor(planData?.pricing?.itemTotal?.amountMinor ?? 164900);
+  const shippingFormatted = formatMinor(planData?.pricing?.shipping?.amountMinor ?? 0);
+  const totalCostFormatted = formatMinor(planData?.pricing?.totalKnownCost?.amountMinor ?? 164900);
+  const currency = planData?.pricing?.totalKnownCost?.currency || "USD";
+  const warrantyText = `${planData?.itemSnapshot?.returnWindowDays || 30}-day returns \u00b7 ${planData?.itemSnapshot?.warrantyMonths || 24}-mo warranty`;
+
+  const specsList = planData?.itemSnapshot?.specs
+    ? Object.entries(planData.itemSnapshot.specs)
+        .slice(0, 2)
+        .map(([k, v]) => `${k}: ${String(v)}`)
+        .join(" \u00b7 ")
+    : "Standard verified specifications";
 
   return (
     <>
@@ -154,25 +216,25 @@ export default function ApprovePage() {
             <PurchasePlanCard
               planVersion={planVersion}
               planHash={planHash}
-              itemTitle="Halden Vector 16"
-              specsSummary="32 GB &middot; 1 TB"
-              quantity={1}
-              sellerName="Brightline Electronics"
-              itemPriceFormatted="$1,649.00"
-              shippingFormatted="$0.00"
+              itemTitle={itemTitle}
+              specsSummary={specsList}
+              quantity={planData?.quantity || 1}
+              sellerName={sellerName}
+              itemPriceFormatted={itemPriceFormatted}
+              shippingFormatted={shippingFormatted}
               shippingNote="merchant-stated"
               taxNote="not included in total"
-              totalKnownCostFormatted="$1,649.00"
-              currency="USD"
+              totalKnownCostFormatted={totalCostFormatted}
+              currency={currency}
               reverifiedSecondsAgo={reverifySeconds}
               validMinutes={10}
-              warrantyText="30-day returns &middot; 36-mo warranty"
+              warrantyText={warrantyText}
             />
 
             <CheckoutMethodChooser
               selectedMode={selectedMode}
               onSelectMode={setSelectedMode}
-              sellerName="Brightline"
+              sellerName={sellerName}
             />
 
             <PurchaseLifecycleTimeline
@@ -183,9 +245,9 @@ export default function ApprovePage() {
           {/* Right Column: Your Approval Box */}
           <div className="lg:col-span-5">
             <ApprovalBox
-              amountFormatted="$1,649.00"
-              currency="USD"
-              summaryText="1 &times; Halden Vector 16 from Brightline Electronics. Tax not included."
+              amountFormatted={totalCostFormatted}
+              currency={currency}
+              summaryText={`${planData?.quantity || 1} \u00d7 ${itemTitle} from ${sellerName}. Tax not included.`}
               isApproved={isApproved}
               isLoading={isLoading}
               isExpired={isExpired}
@@ -200,3 +262,17 @@ export default function ApprovePage() {
   );
 }
 
+export default function ApprovePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-16 text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-[#0E5A55] border-t-transparent mb-4" />
+          <p className="text-xs text-[#4D534F]">Loading purchase plan...</p>
+        </main>
+      }
+    >
+      <ApproveContent />
+    </Suspense>
+  );
+}

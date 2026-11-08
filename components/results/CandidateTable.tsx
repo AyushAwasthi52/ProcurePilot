@@ -10,24 +10,30 @@ export interface CandidateRowData {
   shippingNote: string;
   warrantyText: string;
   isWarrantyUnverified?: boolean;
-  ramText: string;
+  specsText?: string;
+  ramText?: string;
   sellerConfidenceLevel: "High" | "Medium" | "Low";
   score: number;
 }
 
 interface CandidateTableProps {
   candidates: CandidateRowData[];
+  category?: string;
 }
 
-export function CandidateTable({ candidates }: CandidateTableProps) {
+export function CandidateTable({ candidates, category }: CandidateTableProps) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
   return (
     <div className="bg-white rounded-[18px] border border-[#E2DDD0] overflow-hidden shadow-sm mb-8">
       <div className="p-6 border-b border-[#E2DDD0]">
         <h3 className="font-heading font-bold text-xl text-[#16191C] mb-1">
-          Eligible candidates
+          Eligible candidates {category ? `· ${category}` : ""}
         </h3>
         <p className="text-xs text-[#4D534F]">
-          {candidates.length} of 16 offers pass every checkable constraint: unverified fields stay flagged. Sorted by value score.
+          {candidates.length} offer{candidates.length === 1 ? "" : "s"} pass every checkable constraint: unverified fields stay flagged. Sorted by composite value score.
         </p>
       </div>
 
@@ -38,7 +44,7 @@ export function CandidateTable({ candidates }: CandidateTableProps) {
               <th className="py-3 px-6">Product</th>
               <th className="py-3 px-6">Total Known Cost</th>
               <th className="py-3 px-6">Warranty</th>
-              <th className="py-3 px-6">RAM</th>
+              <th className="py-3 px-6">Key Specs</th>
               <th className="py-3 px-6">Seller Confidence</th>
               <th className="py-3 px-6 text-right">Score</th>
             </tr>
@@ -72,7 +78,7 @@ export function CandidateTable({ candidates }: CandidateTableProps) {
                   )}
                 </td>
                 <td className="py-4 px-6 text-[#16191C] font-mono">
-                  {cand.ramText}
+                  {cand.specsText || cand.ramText || "Standard specs"}
                 </td>
                 <td className="py-4 px-6">
                   <ProvenanceChip
@@ -91,4 +97,3 @@ export function CandidateTable({ candidates }: CandidateTableProps) {
     </div>
   );
 }
-

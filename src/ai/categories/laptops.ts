@@ -1,17 +1,11 @@
-import { ClarificationQuestion } from "../schemas/clarification";
-import { PreferenceWeight } from "../schemas/brief";
+import { CategoryDefinition } from "./types";
 
-export interface CategoryAttributeDefinition {
-  name: string;
-  label: string;
-  type: "number" | "string" | "boolean";
-  unit?: string;
-  isExclusionCritical?: boolean;
-}
+export { type CategoryAttributeDefinition } from "./types";
 
-export const LAPTOP_CATEGORY = {
+export const LAPTOP_CATEGORY: CategoryDefinition = {
   id: "Laptop",
   label: "Laptop",
+  aliases: ["laptop", "notebook", "ultrabook", "macbook", "thinkpad", "workstation"],
   attributes: [
     {
       name: "ramGb",
@@ -58,14 +52,14 @@ export const LAPTOP_CATEGORY = {
       type: "number",
       unit: "hours",
     },
-  ] as CategoryAttributeDefinition[],
+  ],
 
   defaultPreferences: [
     { attribute: "thermals", label: "Thermals", weight: 30 },
     { attribute: "upgradeability", label: "Upgradeability", weight: 25 },
     { attribute: "gpuPerformance", label: "GPU performance", weight: 25 },
     { attribute: "batteryLife", label: "Battery life", weight: 10 },
-  ] as PreferenceWeight[],
+  ],
 
   clarificationQuestions: {
     cudaSupport: {
@@ -92,7 +86,6 @@ export const LAPTOP_CATEGORY = {
           value: "either",
         },
       ],
-    } as ClarificationQuestion,
+    },
   },
 };
-

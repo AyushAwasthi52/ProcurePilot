@@ -9,6 +9,7 @@ import { buildPurchasePlan, PLAN_TTL_SECONDS } from "@/src/domain/purchase/plan"
 import { savePurchasePlan } from "@/src/domain/purchase/repository";
 import { recordAuditEvent } from "@/src/observability/audit";
 import { ItemSnapshot, CostStatus, CheckoutCapability } from "@/src/domain/purchase/types";
+import { searchOrchestrator } from "@/src/discovery/search-orchestrator";
 
 const CreatePlanSchema = z.object({
   requestId: z.string().min(1),
@@ -101,6 +102,28 @@ export async function POST(req: NextRequest) {
           };
           break;
         }
+      }
+    }
+
+    // Check search orchestrator completed runs
+    if (!itemSnapshot) {
+      const liveOffer = searchOrchestrator.findOfferById(offerId);
+      if (liveOffer) {
+        itemPriceMinor = liveOffer.priceMinor;
+        currency = liveOffer.currency;
+        shippingStatus = liveOffer.shippingStatus as CostStatus;
+        shippingMinor = liveOffer.shippingMinor;
+        checkoutCapability = liveOffer.checkoutCapability as CheckoutCapability;
+        itemSnapshot = {
+          title: liveOffer.productTitle,
+          brand: liveOffer.productBrand,
+          specs: liveOffer.attributes,
+          merchantId: liveOffer.merchantId,
+          merchantName: liveOffer.merchantName,
+          url: liveOffer.url,
+          warrantyMonths: liveOffer.warrantyMonths ?? 24,
+          returnWindowDays: 30,
+        };
       }
     }
 

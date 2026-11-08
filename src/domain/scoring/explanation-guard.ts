@@ -10,11 +10,27 @@ export interface RecommendationFacts {
 
 export function generateTemplateExplanation(facts: RecommendationFacts): string {
   const rec = facts.recommendedOffer;
-  const ram = (rec.attributes.ramGb as number) ?? 32;
-  const warranty = rec.warrantyMonths ?? 36;
-  const thermals = (rec.attributes.thermalsScore as number) ?? 92;
+  const warranty = rec.warrantyMonths ?? 24;
+  let rationale = "";
 
-  let rationale = `Highest requirement fit: ${ram} GB RAM across two upgradeable slots, a ${warranty}-month warranty and the strongest thermal score (${thermals}) of the eligible set.`;
+  if (rec.productCategory === "Laptop" || (!rec.productCategory && rec.attributes.ramGb)) {
+    const ram = (rec.attributes.ramGb as number) ?? 32;
+    const thermals = (rec.attributes.thermalsScore as number) ?? 92;
+    rationale = `Highest requirement fit: ${ram} GB RAM across two upgradeable slots, a ${warranty}-month warranty and the strongest thermal score (${thermals}) of the eligible set.`;
+  } else if (rec.productCategory === "Headphones") {
+    const ancText = rec.attributes.anc ? "Active Noise Cancellation (ANC)" : "acoustic isolation";
+    const batteryText = rec.attributes.batteryHours ? `, ${rec.attributes.batteryHours}h battery life` : "";
+    rationale = `Highest requirement fit: ${ancText}${batteryText} and a ${warranty}-month warranty of the eligible audio candidates.`;
+  } else if (rec.productCategory === "Smartphone") {
+    const osText = rec.attributes.os ? `${rec.attributes.os} ecosystem` : "mobile OS";
+    const storageText = rec.attributes.storageGb ? `, ${rec.attributes.storageGb} GB storage` : "";
+    rationale = `Highest requirement fit: ${osText}${storageText} and a ${warranty}-month warranty.`;
+  } else if (rec.productCategory === "Monitor") {
+    const refreshText = rec.attributes.refreshRateHz ? `${rec.attributes.refreshRateHz}Hz refresh rate` : "high clarity panel";
+    rationale = `Highest requirement fit: ${refreshText}, superior color accuracy and a ${warranty}-month warranty.`;
+  } else {
+    rationale = `Highest requirement fit: verified specifications, a ${warranty}-month warranty and highest composite trust score.`;
+  }
 
   if (facts.costGapMinor && facts.costGapMinor > 0) {
     const gapUsd = Math.round(facts.costGapMinor / 100);

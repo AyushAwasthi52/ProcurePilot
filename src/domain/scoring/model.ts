@@ -73,8 +73,21 @@ export function computeRequirementFit(
     } else if (pref.attribute === "gpuPerformance") {
       prefSatisfaction = offer.attributes.cudaSupport ? 1.0 : 0.6;
     } else if (pref.attribute === "batteryLife") {
-      const hours = (offer.attributes.batteryLifeHours as number) ?? 6;
+      const hours = (offer.attributes.batteryLifeHours as number) ?? (offer.attributes.batteryHours as number) ?? 6;
       prefSatisfaction = Math.min(1.0, Math.max(0.0, hours / 10));
+    } else if (pref.attribute === "noiseCancellation") {
+      prefSatisfaction = offer.attributes.anc ? 1.0 : 0.5;
+    } else if (pref.attribute === "cameraQuality") {
+      const cam = (offer.attributes.cameraScore as number) ?? 80;
+      prefSatisfaction = Math.min(1.0, Math.max(0.0, cam / 100));
+    } else if (pref.attribute === "refreshRate") {
+      const hz = (offer.attributes.refreshRateHz as number) ?? 60;
+      prefSatisfaction = Math.min(1.0, hz / 120);
+    } else if (offer.attributes[pref.attribute] !== undefined) {
+      const val = offer.attributes[pref.attribute];
+      if (typeof val === "boolean") prefSatisfaction = val ? 1.0 : 0.3;
+      else if (typeof val === "number") prefSatisfaction = Math.min(1.0, val / 100);
+      else prefSatisfaction = 0.8;
     }
 
     weightedSum += w * prefSatisfaction;
@@ -88,12 +101,24 @@ export function computePerformancePerDollar(
   offer: NormalizedOffer,
   allOffers: NormalizedOffer[]
 ): number {
-  // Category benchmark proxy: RAM + thermals + GPU
-  const ram = (offer.attributes.ramGb as number) ?? 16;
-  const thermals = (offer.attributes.thermalsScore as number) ?? 80;
-  const hasCuda = offer.attributes.cudaSupport ? 1.2 : 1.0;
+  const isLaptop =
+    offer.productCategory === "Laptop" ||
+    offer.attributes.ramGb !== undefined ||
+    offer.attributes.thermalsScore !== undefined;
 
-  const rawBenchmark = (ram * 10 + thermals) * hasCuda;
+  let rawBenchmark: number;
+  if (isLaptop) {
+    const ram = (offer.attributes.ramGb as number) ?? 16;
+    const thermals = (offer.attributes.thermalsScore as number) ?? 80;
+    const hasCuda = offer.attributes.cudaSupport ? 1.2 : 1.0;
+    rawBenchmark = (ram * 10 + thermals) * hasCuda;
+  } else {
+    // Category-agnostic benchmark using ratings and warranty
+    const rating = offer.sellerRating ?? 4.0;
+    const warranty = offer.warrantyMonths ?? 12;
+    rawBenchmark = rating * 40 + warranty * 5;
+  }
+
   const ratio = (rawBenchmark / Math.max(1, offer.totalKnownMinor)) * 100000;
 
   // Relative ranking among candidates
@@ -102,10 +127,23 @@ export function computePerformancePerDollar(
   }
 
   const ratios = allOffers.map((o) => {
-    const r = (o.attributes.ramGb as number) ?? 16;
-    const t = (o.attributes.thermalsScore as number) ?? 80;
-    const c = o.attributes.cudaSupport ? 1.2 : 1.0;
-    return ((r * 10 + t) * c / Math.max(1, o.totalKnownMinor)) * 100000;
+    const oIsLaptop =
+      o.productCategory === "Laptop" ||
+      o.attributes.ramGb !== undefined ||
+      o.attributes.thermalsScore !== undefined;
+
+    let oBenchmark: number;
+    if (oIsLaptop) {
+      const r = (o.attributes.ramGb as number) ?? 16;
+      const t = (o.attributes.thermalsScore as number) ?? 80;
+      const c = o.attributes.cudaSupport ? 1.2 : 1.0;
+      oBenchmark = (r * 10 + t) * c;
+    } else {
+      const rating = o.sellerRating ?? 4.0;
+      const warranty = o.warrantyMonths ?? 12;
+      oBenchmark = rating * 40 + warranty * 5;
+    }
+    return (oBenchmark / Math.max(1, o.totalKnownMinor)) * 100000;
   });
 
   const min = Math.min(...ratios);

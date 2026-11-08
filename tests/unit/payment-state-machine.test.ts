@@ -58,3 +58,4 @@ describe("Payment State Machine (Section 9.3)", () => {
     expect(isTerminalState("CREATED")).toBe(false);
   });
 });
+

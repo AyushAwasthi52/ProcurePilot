@@ -61,3 +61,4 @@ export async function getPayPalAccessToken(
 
   return data.access_token;
 }
+

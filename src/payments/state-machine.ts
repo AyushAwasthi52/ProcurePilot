@@ -47,3 +47,4 @@ export function isTerminalState(status: PaymentStatus): boolean {
   const allowed = ALLOWED_TRANSITIONS[status] || [];
   return allowed.length === 0;
 }
+

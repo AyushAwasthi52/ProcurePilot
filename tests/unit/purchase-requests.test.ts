@@ -147,6 +147,65 @@ describe("Purchase Requests API", () => {
     expect(errorBody.error.code).toBe("NOT_FOUND");
   });
 
+  it("handles clarification submission and updates brief", async () => {
+    const userAlice = { id: "usr_alice", email: "alice@example.com" };
+    const sessionAlice = await createSessionToken(userAlice);
+
+    // 1. Create request with ML requirement (triggers CUDA clarification)
+    const createReq = new NextRequest(
+      "http://localhost:3000/api/purchase-requests",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${sessionAlice}`,
+          "x-test-skip-csrf": "true",
+        },
+        body: JSON.stringify({
+          rawPrompt: "A laptop for ML experiments with 32GB RAM and 2-year warranty. Max $1,800.",
+        }),
+      }
+    );
+    const createRes = await POST(createReq);
+    const created = await createRes.json();
+
+    expect(created.clarificationQuestion).not.toBeNull();
+    expect(created.clarificationQuestion.attribute).toBe("cudaSupport");
+
+    // 2. Submit clarification answer
+    const { POST: postClarification } = await import(
+      "@/app/api/purchase-requests/[id]/clarifications/route"
+    );
+    const clarifyReq = new NextRequest(
+      `http://localhost:3000/api/purchase-requests/${created.id}/clarifications`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${sessionAlice}`,
+          "x-test-skip-csrf": "true",
+        },
+        body: JSON.stringify({
+          questionId: "clarify_cuda_ml",
+          selectedOptionId: "opt_cuda_yes",
+        }),
+      }
+    );
+
+    const clarifyRes = await postClarification(clarifyReq, {
+      params: Promise.resolve({ id: created.id }),
+    });
+    expect(clarifyRes.status).toBe(200);
+
+    const clarifiedData = await clarifyRes.json();
+    expect(clarifiedData.clarificationQuestion).toBeNull();
+    const cudaConstraint = clarifiedData.brief.mustHave.find(
+      (m: { attribute: string }) => m.attribute === "cudaSupport"
+    );
+    expect(cudaConstraint.confirmed).toBe(true);
+    expect(cudaConstraint.provenance).toBe("you-said");
+  });
+
   it("rejects unauthenticated requests with UNAUTHENTICATED (401)", async () => {
     const req = new NextRequest("http://localhost:3000/api/purchase-requests", {
       method: "POST",

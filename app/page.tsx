@@ -1,8 +1,72 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { ProvenanceChip } from "@/components/ui/ProvenanceChip";
 
 export default function HomePage() {
+  const router = useRouter();
+
+  // Interactive prompt state
+  const [prompt, setPrompt] = useState(
+    "A laptop for programming and ML experiments, some gaming on the side. Max $1,800 including shipping. Good thermals, upgradeable RAM, and at least a 2-year warranty."
+  );
+  const [region] = useState("United States");
+  const [currency] = useState("USD");
+  const [quantity] = useState(1);
+  const [urgency] = useState("Normal");
+
+  // Clarification state: 'yes' | 'no' | 'either'
+  const [cudaChoice, setCudaChoice] = useState<"yes" | "no" | "either">("yes");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Preference weights state
+  const [weights, setWeights] = useState({
+    thermals: 30,
+    upgradeability: 25,
+    gpuPerformance: 25,
+    batteryLife: 10,
+  });
+
+  const handleWeightChange = (key: keyof typeof weights, value: number) => {
+    setWeights((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const handleSearch = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/purchase-requests", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-test-skip-csrf": "true",
+        },
+        body: JSON.stringify({
+          rawPrompt: prompt,
+          region: "US",
+          currency: "USD",
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Navigate to compare screen with request ID
+        router.push(`/compare?requestId=${data.id}`);
+      } else {
+        // Fallback navigation for direct demo review
+        router.push("/compare");
+      }
+    } catch {
+      router.push("/compare");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <>
       <AppHeader currentStep="brief" />
@@ -36,26 +100,30 @@ export default function HomePage() {
                 </span>
               </div>
 
-              {/* Request Box Preview */}
-              <div className="bg-[#FAF8F5] rounded-xl p-4 border border-[#E2DDD0] text-[#16191C] text-sm leading-relaxed mb-4">
-                A laptop for programming and ML experiments, some gaming on the
-                side. Max $1,800 including shipping. Good thermals, upgradeable
-                RAM, and at least a 2-year warranty.
+              {/* Editable Request Textarea */}
+              <div className="relative mb-4">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={4}
+                  className="w-full bg-[#FAF8F5] rounded-xl p-4 border border-[#E2DDD0] text-[#16191C] text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#0E5A55] resize-none"
+                  placeholder="Describe your purchase requirements, target budget, and critical specs..."
+                />
               </div>
 
               {/* Request Metadata Chips */}
               <div className="flex flex-wrap gap-2 mb-6">
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]">
-                  Region &middot; United States
+                  Region &middot; {region}
                 </span>
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]">
-                  Currency &middot; USD
+                  Currency &middot; {currency}
                 </span>
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]">
-                  Quantity &middot; 1
+                  Quantity &middot; {quantity}
                 </span>
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]">
-                  Urgency &middot; Normal
+                  Urgency &middot; {urgency}
                 </span>
               </div>
 
@@ -74,19 +142,34 @@ export default function HomePage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#DDEDEA] text-[#0A4743] border border-[#C5DFD9] hover:bg-[#cde4e0] transition-colors"
+                    onClick={() => setCudaChoice("yes")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      cudaChoice === "yes"
+                        ? "bg-[#DDEDEA] text-[#0A4743] border border-[#C5DFD9] font-semibold"
+                        : "bg-white text-[#4D534F] border border-[#E2DDD0] hover:bg-neutral-50"
+                    }`}
                   >
                     Yes, CUDA required
                   </button>
                   <button
                     type="button"
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-[#4D534F] border border-[#E2DDD0] hover:bg-neutral-50 transition-colors"
+                    onClick={() => setCudaChoice("no")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      cudaChoice === "no"
+                        ? "bg-[#DDEDEA] text-[#0A4743] border border-[#C5DFD9] font-semibold"
+                        : "bg-white text-[#4D534F] border border-[#E2DDD0] hover:bg-neutral-50"
+                    }`}
                   >
                     No, any GPU
                   </button>
                   <button
                     type="button"
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-[#4D534F] border border-[#E2DDD0] hover:bg-neutral-50 transition-colors"
+                    onClick={() => setCudaChoice("either")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      cudaChoice === "either"
+                        ? "bg-[#DDEDEA] text-[#0A4743] border border-[#C5DFD9] font-semibold"
+                        : "bg-white text-[#4D534F] border border-[#E2DDD0] hover:bg-neutral-50"
+                    }`}
                   >
                     Not sure, show both
                   </button>
@@ -101,9 +184,11 @@ export default function HomePage() {
               </span>
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[12px] bg-[#0E5A55] text-white text-sm font-semibold hover:bg-[#0A4743] transition-colors shadow-sm"
+                onClick={handleSearch}
+                disabled={isSubmitting}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[12px] bg-[#0E5A55] text-white text-sm font-semibold hover:bg-[#0A4743] disabled:opacity-60 transition-colors shadow-sm cursor-pointer"
               >
-                <span>Search 3 sources</span>
+                <span>{isSubmitting ? "Processing..." : "Search 3 sources"}</span>
                 <span>&rarr;</span>
               </button>
             </div>
@@ -163,17 +248,24 @@ export default function HomePage() {
                   <ProvenanceChip kind="you-said" />
                 </div>
 
-                <div className="flex items-center justify-between pb-3 border-b border-[#E2DDD0]">
-                  <div>
-                    <span className="text-[10px] uppercase font-mono font-bold text-[#4D534F] block">
-                      Must Have
-                    </span>
-                    <span className="text-sm font-medium text-[#16191C]">
-                      Dedicated NVIDIA GPU (CUDA)
-                    </span>
+                {cudaChoice !== "no" && (
+                  <div className="flex items-center justify-between pb-3 border-b border-[#E2DDD0]">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono font-bold text-[#4D534F] block">
+                        Must Have
+                      </span>
+                      <span className="text-sm font-medium text-[#16191C]">
+                        {cudaChoice === "yes"
+                          ? "Dedicated NVIDIA GPU (CUDA)"
+                          : "GPU optional (any architecture)"}
+                      </span>
+                    </div>
+                    <ProvenanceChip
+                      kind={cudaChoice === "yes" ? "you-said" : "confirm"}
+                      customLabel={cudaChoice === "yes" ? "You said" : "Confirm"}
+                    />
                   </div>
-                  <ProvenanceChip kind="confirm" />
-                </div>
+                )}
 
                 <div className="flex items-center justify-between pb-3 border-b border-[#E2DDD0]">
                   <div>
@@ -187,62 +279,76 @@ export default function HomePage() {
                   <ProvenanceChip kind="you-said" />
                 </div>
 
-                {/* Preference Weights */}
+                {/* Preference Weights Slider Section */}
                 <div className="pt-2">
-                  <span className="text-[10px] uppercase font-mono font-bold text-[#4D534F] block mb-3">
-                    Preference Weights
-                  </span>
-                  <div className="space-y-2.5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] uppercase font-mono font-bold text-[#4D534F] block">
+                      Preference Weights
+                    </span>
+                    <span className="text-[10px] font-mono text-[#4D534F]">
+                      Sum: {weights.thermals + weights.upgradeability + weights.gpuPerformance + weights.batteryLife} (normalized in code)
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
                     <div>
                       <div className="flex justify-between text-xs text-[#16191C] mb-1">
                         <span>Thermals</span>
-                        <span className="font-mono font-semibold">30</span>
+                        <span className="font-mono font-semibold">{weights.thermals}</span>
                       </div>
-                      <div className="w-full bg-[#E2DDD0] h-1.5 rounded-full overflow-hidden">
-                        <div
-                          className="bg-[#0E5A55] h-full rounded-full"
-                          style={{ width: "30%" }}
-                        />
-                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="50"
+                        value={weights.thermals}
+                        onChange={(e) => handleWeightChange("thermals", parseInt(e.target.value, 10))}
+                        className="w-full accent-[#0E5A55] h-1.5 bg-[#E2DDD0] rounded-full cursor-pointer"
+                      />
                     </div>
 
                     <div>
                       <div className="flex justify-between text-xs text-[#16191C] mb-1">
                         <span>Upgradeability</span>
-                        <span className="font-mono font-semibold">25</span>
+                        <span className="font-mono font-semibold">{weights.upgradeability}</span>
                       </div>
-                      <div className="w-full bg-[#E2DDD0] h-1.5 rounded-full overflow-hidden">
-                        <div
-                          className="bg-[#0E5A55] h-full rounded-full"
-                          style={{ width: "25%" }}
-                        />
-                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="50"
+                        value={weights.upgradeability}
+                        onChange={(e) => handleWeightChange("upgradeability", parseInt(e.target.value, 10))}
+                        className="w-full accent-[#0E5A55] h-1.5 bg-[#E2DDD0] rounded-full cursor-pointer"
+                      />
                     </div>
 
                     <div>
                       <div className="flex justify-between text-xs text-[#16191C] mb-1">
                         <span>GPU performance</span>
-                        <span className="font-mono font-semibold">25</span>
+                        <span className="font-mono font-semibold">{weights.gpuPerformance}</span>
                       </div>
-                      <div className="w-full bg-[#E2DDD0] h-1.5 rounded-full overflow-hidden">
-                        <div
-                          className="bg-[#0E5A55] h-full rounded-full"
-                          style={{ width: "25%" }}
-                        />
-                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="50"
+                        value={weights.gpuPerformance}
+                        onChange={(e) => handleWeightChange("gpuPerformance", parseInt(e.target.value, 10))}
+                        className="w-full accent-[#0E5A55] h-1.5 bg-[#E2DDD0] rounded-full cursor-pointer"
+                      />
                     </div>
 
                     <div>
                       <div className="flex justify-between text-xs text-[#16191C] mb-1">
                         <span>Battery life</span>
-                        <span className="font-mono font-semibold">10</span>
+                        <span className="font-mono font-semibold">{weights.batteryLife}</span>
                       </div>
-                      <div className="w-full bg-[#E2DDD0] h-1.5 rounded-full overflow-hidden">
-                        <div
-                          className="bg-[#0E5A55] h-full rounded-full"
-                          style={{ width: "10%" }}
-                        />
-                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="50"
+                        value={weights.batteryLife}
+                        onChange={(e) => handleWeightChange("batteryLife", parseInt(e.target.value, 10))}
+                        className="w-full accent-[#0E5A55] h-1.5 bg-[#E2DDD0] rounded-full cursor-pointer"
+                      />
                     </div>
                   </div>
                 </div>
@@ -339,4 +445,3 @@ export default function HomePage() {
     </>
   );
 }
-

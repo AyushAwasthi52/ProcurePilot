@@ -4,6 +4,7 @@ import { requireSession } from "@/src/auth/session";
 import { verifyCsrfToken } from "@/src/auth/csrf";
 import { createErrorResponse, ValidationFailedError } from "@/src/auth/errors";
 import { createPurchaseRequest } from "@/src/db/queries/purchase-requests";
+import { extractRequirementsFromPrompt } from "@/src/ai/orchestrator/extraction";
 import { recordAuditEvent } from "@/src/observability/audit";
 
 const CreateRequestSchema = z.object({
@@ -31,34 +32,48 @@ export async function POST(req: NextRequest) {
 
     const { rawPrompt, region, currency } = parseResult.data;
 
+    // AI Requirement Extraction (structured output + Zod validation)
+    const { brief, clarificationQuestion } = await extractRequirementsFromPrompt(
+      rawPrompt
+    );
+
     const purchaseRequest = await createPurchaseRequest({
       userId: user.id,
       rawPrompt,
-      region,
-      currency,
+      region: region ?? brief.region,
+      currency: currency ?? brief.budget.currency,
+      brief,
     });
 
     await recordAuditEvent({
       userId: user.id,
       entityType: "PurchaseRequest",
       entityId: purchaseRequest.id,
-      action: "CREATED",
+      action: "CREATED_WITH_BRIEF",
       metadata: {
-        rawPromptLength: rawPrompt.length,
-        region: purchaseRequest.region,
-        currency: purchaseRequest.currency,
+        category: brief.category,
+        budgetMinor: brief.budget.amountMinor,
+        currency: brief.budget.currency,
+        mustHaveCount: brief.mustHave.length,
+        hasClarification: !!clarificationQuestion,
       },
       requestId,
     });
 
-    return NextResponse.json(purchaseRequest, {
-      status: 201,
-      headers: {
-        "x-request-id": requestId,
+    return NextResponse.json(
+      {
+        ...purchaseRequest,
+        brief,
+        clarificationQuestion,
       },
-    });
+      {
+        status: 201,
+        headers: {
+          "x-request-id": requestId,
+        },
+      }
+    );
   } catch (error) {
     return createErrorResponse(error, requestId);
   }
 }
-

@@ -28,7 +28,7 @@ export function evaluateConstraint(
   const attrKey = constraint.attribute;
   const id = constraint.id || attrKey;
   const rawActual =
-    offer.attributes[attrKey] !== undefined
+    offer.attributes && offer.attributes[attrKey] !== undefined
       ? offer.attributes[attrKey]
       : (offer as unknown as Record<string, unknown>)[attrKey];
 
@@ -83,7 +83,7 @@ export function evaluateConstraint(
 }
 
 export function evaluateOfferConstraints(
-  briefMustHaves: MustHaveConstraint[],
+  briefMustHaves: MustHaveConstraint[] = [],
   budget: Budget,
   offer: NormalizedOffer
 ): OfferConstraintSummary {
@@ -91,9 +91,11 @@ export function evaluateOfferConstraints(
   const results: Record<string, ConstraintStatus> = {};
   const unverifiedAttributes: string[] = [];
 
+  const mustHaves = Array.isArray(briefMustHaves) ? briefMustHaves : [];
+
   // 1. Evaluate user must-haves
   let anyUserFail = false;
-  for (const mh of briefMustHaves) {
+  for (const mh of mustHaves) {
     const res = evaluateConstraint(mh, offer);
     details.push(res);
     results[res.attribute] = res.status;
@@ -106,16 +108,19 @@ export function evaluateOfferConstraints(
   }
 
   // 2. Evaluate hard budget constraint (Section 6.3)
-  const budgetCapMinor = budget.amountMinor;
+  const budgetCapMinor = budget?.amountMinor;
   let budgetStatus: ConstraintStatus = "PASS";
 
-  if (offer.priceMinor > budgetCapMinor) {
+  if (budgetCapMinor === null || budgetCapMinor === undefined) {
+    // Budget is unknown / not specified -> all offers within budget, but constraint marked UNVERIFIED
+    budgetStatus = "UNVERIFIED";
+  } else if (offer.priceMinor > budgetCapMinor) {
     // Item price alone exceeds cap -> hard FAIL
     budgetStatus = "FAIL";
   } else if (offer.totalKnownMinor > budgetCapMinor) {
     // Total known cost exceeds cap -> hard FAIL
     budgetStatus = "FAIL";
-  } else if (offer.shippingStatus === "UNKNOWN" && budget.includesShipping) {
+  } else if (offer.shippingStatus === "UNKNOWN" && budget?.includesShipping) {
     // Price under cap, but shipping unknown -> UNVERIFIED
     budgetStatus = "UNVERIFIED";
     unverifiedAttributes.push("shippingCost");
@@ -124,15 +129,19 @@ export function evaluateOfferConstraints(
   }
 
   results["budget"] = budgetStatus;
+  const isZeroDecimal = (budget?.currency || "USD").toUpperCase() === "JPY";
+  const factor = isZeroDecimal ? 1 : 100;
   details.push({
     constraintId: "budget",
     attribute: "budget",
     status: budgetStatus,
-    expected: `<= ${budgetCapMinor} ${budget.currency}`,
+    expected: budgetCapMinor ? `<= ${budgetCapMinor} ${budget?.currency ?? "USD"}` : "No budget cap set",
     actual: `${offer.totalKnownMinor} ${offer.currency}`,
     message:
-      budgetStatus === "FAIL"
-        ? `$${((offer.totalKnownMinor - budgetCapMinor) / 100).toFixed(2)} over budget cap`
+      budgetCapMinor === null || budgetCapMinor === undefined
+        ? "No budget cap set — all candidate prices eligible"
+        : budgetStatus === "FAIL"
+        ? `${budget?.currency ?? "$"}${((offer.totalKnownMinor - budgetCapMinor) / factor).toFixed(isZeroDecimal ? 0 : 2)} over budget cap`
         : budgetStatus === "UNVERIFIED"
         ? "Item price under cap, but shipping cost is unknown"
         : "Within budget",

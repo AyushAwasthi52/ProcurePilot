@@ -21,6 +21,16 @@
   - **Security & CSRF Enforcement:** Completely eliminated browser-side `x-test-skip-csrf` bypasses. Added `GET /api/csrf` endpoint and double-submit verification. Restricted test header bypasses strictly to `NODE_ENV === "test"`.
   - **Regression Testing:** 29 test suites, 129/129 tests passing.
 
+- **Universal Product Discovery Engine & Real Provider Integrations:**
+  - **Internal Server Error Root Cause & AI Resilience:** Diagnosed `keyboard` request crash: `.env` configured `AI_PROVIDER=gemini` with an unverified or invalid API key or a 404 model version, causing `GeminiLlmClient` to throw an unhandled exception that returned HTTP 500 to the browser. Implemented AI provider resilience in `src/ai/orchestrator/extraction.ts`: if the primary LLM provider fails, times out (10s AbortSignal), or encounters API key/quota errors, the orchestrator logs a warning and gracefully falls back to the deterministic offline extraction engine (`MockLlmClient`).
+  - **Universal Category Extraction & Clean Search Queries:** Added category definitions and alias matchers for `Keyboard`, `Furniture`, `Footwear`, `Home Appliances` alongside existing categories, plus pure generic support for any unfamiliar item. Search queries are stripped of budget/boilerplate noise (`under ₹8,000`, `urgent`, `looking for`) to produce high-relevance search queries (`wireless mechanical keyboard`, `ergonomic office chair`).
+  - **International Currency & Minor Unit Representation:** Full support for INR (`₹`, paise minor units), USD (`$`), EUR (`€`), GBP (`£`), CAD, AUD, JPY across prompts and extraction.
+  - **Missing Budget Handling:** Never defaults to $0.00 or an empty brief. For requests with no budget (e.g. `keyboard`, `ergonomic office chair`, `running shoes`), sets a provisional baseline, flags an unconfirmed budget constraint in `mustHave`, and triggers an interactive clarification question with formatted price tiers (`Economy`, `Mid-range`, `Premium`, `Flexible`).
+  - **SerpApi Google Shopping Provider Adapter (`src/providers/serpapi/adapter.ts`):** Genuine live Google Shopping integration with geographic targeting (`gl=in`, `hl=en`, `location=India`), parsing titles, prices into minor units, merchant details, honest shipping status (`KNOWN` with 0 minor for free delivery, parsed fee, or `UNKNOWN` without fabricating), ratings, review counts, and live provenance (`isDemo: false`).
+  - **eBay Browse API Provider Adapter (`src/providers/ebay/adapter.ts`):** Official OAuth 2.0 client credentials flow with in-memory token caching and expiration TTL, marketplace targeting (`EBAY_IN`, `EBAY_US`, `EBAY_GB`), keyword search, and normalized offers.
+  - **Truthful Status Reporting:** Distinguishes `LIVE`, `DEMO`, and `UNCONFIGURED` provider states in `SearchOrchestrator` and `/compare` status strips.
+  - **Verification:** 34 test suites, 150/150 tests passing. Clean TypeScript, ESLint, and Next.js production build.
+
 ---
 
 ## Category-Agnostic Architecture Details
@@ -69,3 +79,44 @@
    - Clean TypeScript check (`npm run typecheck`).
    - Clean ESLint check (`npm run lint`).
    - Clean Next.js production build (`npm run build`).
+
+---
+
+## Comparison Page Resilience & Data Contract Hardening
+
+### Incident Analysis
+- **Symptom:** `TypeError: Cannot read properties of undefined (reading 'amountMinor')` on `/compare` at `app/compare/page.tsx:214` inside `CompareContent` (`brief.budget.amountMinor`).
+- **Impact:** Any user searching for a product and navigating to the comparison screen suffered a hard crash when the page retrieved the persisted purchase request.
+
+### Root Cause
+1. **Schema & Model Asymmetry:** In PostgreSQL / Prisma (`prisma/schema.prisma`), `model PurchaseBrief` stores flat scalar columns (`budgetMinor Int`, `budgetCurrency String`, `includesShipping Boolean`). The TypeScript domain contract (`PurchaseBrief`) expects a nested `budget: Budget` object (`{ amountMinor, currency, includesShipping, isKnown }`).
+2. **Query Layer Blind Cast:** `src/db/queries/purchase-requests.ts` used `(found.brief as unknown as PurchaseBrief)` across database queries. In-memory creations returned the full in-memory object on initial `POST /api/purchase-requests`, but when `/compare` subsequently fetched `GET /api/purchase-requests/${id}`, the database returned the raw Prisma row where `brief.budget` was literally `undefined`.
+3. **UI and Domain Null-Safety Gaps:** Hardcoded `brief.budget.amountMinor` accesses in `app/compare/page.tsx`, `formatPriceMinor` displaying misleading `"$0.00"` for unspecified budgets on `app/page.tsx`, and unsafe `offer.attributes` indexing in constraint and trust rules without null guards.
+
+### Resolution
+1. **Database Rehydration Mapper ([`src/db/queries/purchase-requests.ts`](src/db/queries/purchase-requests.ts)):**
+   - Implemented `mapDatabaseRowToPurchaseBrief` which reconstructs nested `budget: Budget` (`{ amountMinor: rawMinor > 0 ? rawMinor : null, currency, includesShipping, isKnown: rawMinor > 0 }`) and parses JSON columns (`useCases`, `mustHave`, `preferences`, `assumptions`). Applied to `getPurchaseRequestById`, `createPurchaseRequest`, and `updatePurchaseBrief`.
+2. **Explicit Unknown Budget Semantics ([`src/domain/purchase/types.ts`](src/domain/purchase/types.ts), [`src/ai/schemas/brief.ts`](src/ai/schemas/brief.ts)):**
+   - Updated `Budget` and `BudgetSchema` to support `amountMinor: number | null` and `isKnown: boolean`.
+   - Updated `evaluateOfferConstraints` and `evaluateAndRankOffers` to handle `amountMinor === null` safely without crashing or rejecting valid candidates.
+3. **Comparison Page & Home Page UI Resilience ([`app/compare/page.tsx`](app/compare/page.tsx), [`app/page.tsx`](app/page.tsx)):**
+   - Added defensive response normalization in `executeDiscovery` to ensure any payload contains a valid `budget` object.
+   - Guarded budget displays with currency-aware formatters and fallback chips (`"Budget cap: Not specified"` with direct link to set target budget).
+   - Replaced hardcoded `"$0.00"` displays with `"Not specified (open budget)"`.
+4. **Offer Attribute Null-Safety ([`src/domain/scoring/constraints.ts`](src/domain/scoring/constraints.ts), [`src/domain/scoring/model.ts`](src/domain/scoring/model.ts), [`src/domain/trust/rules.ts`](src/domain/trust/rules.ts)):**
+   - Guarded all `offer.attributes` accesses against `undefined` / `null` attributes in constraints, trust scoring, and rule evaluation.
+5. **Comprehensive Regression Suite ([`tests/unit/comparison-resilience.test.ts`](tests/unit/comparison-resilience.test.ts)):**
+   - Validated all 8 required scenarios:
+     1. Valid keyboard purchase request with hydrated budget.
+     2. Keyboard request with unknown budget (`amountMinor: null`).
+     3. Request with complete budget enforcing boundaries.
+     4. Legacy flat database row reconstruction.
+     5. Malformed API response hydration.
+     6. Request whose brief is null.
+     7. Request created, searched, and evaluated end-to-end.
+     8. Comparison rendering with incomplete optional attributes.
+6. **Verification:**
+   - 35 test suites, 158/158 tests passing (`npm test`).
+   - TypeScript compilation passing (`npm run typecheck`).
+   - ESLint check passing with 0 warnings/errors (`npm run lint`).
+   - Next.js production build passing (`npm run build`).

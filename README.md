@@ -124,10 +124,23 @@ Key environment configuration:
 ```env
 DATABASE_URL="postgresql://user:password@host/neondb?sslmode=require"
 AUTH_SECRET="your-32-char-secure-auth-secret"
+
+# AI Provider (mock, gemini, openai)
+AI_PROVIDER="mock"
+AI_API_KEY="" # Required if AI_PROVIDER=gemini or openai
+
+# Product Discovery Providers
+PRODUCT_PROVIDER="all" # all, seeded, serpapi, ebay
+SERPAPI_API_KEY=""     # Live Google Shopping API key (https://serpapi.com/)
+EBAY_CLIENT_ID=""      # Live eBay Browse API client ID (https://developer.ebay.com/)
+EBAY_CLIENT_SECRET=""  # Live eBay Browse API client secret
+EBAY_ENV="production"  # production or sandbox
+
+# Payments
 PAYPAL_CLIENT_ID="your-paypal-sandbox-client-id"
 PAYPAL_CLIENT_SECRET="your-paypal-sandbox-client-secret"
 PAYPAL_BASE_URL="https://api-m.sandbox.paypal.com"
-PAYMENTS_SIMULATED="false"
+PAYMENTS_SIMULATED="true" # Set to false for real PayPal Sandbox Orders v2 checkout
 ```
 
 ### 4. Database Initialization & Seed

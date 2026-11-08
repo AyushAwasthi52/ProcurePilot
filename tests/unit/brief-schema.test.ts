@@ -10,6 +10,7 @@ describe("PurchaseBrief Schema v3 Validation", () => {
       amountMinor: 180000,
       currency: "USD",
       includesShipping: true,
+      isKnown: true,
     },
     mustHave: [
       {

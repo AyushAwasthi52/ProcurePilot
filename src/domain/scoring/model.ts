@@ -60,31 +60,32 @@ export function computeRequirementFit(
   }
 
   // 2. Preferences satisfaction
+  const attrs = offer.attributes || {};
   for (const pref of brief.preferences) {
     const w = pref.weight;
     totalWeight += w;
 
     let prefSatisfaction = 0.7; // default good baseline
     if (pref.attribute === "thermals") {
-      const thermals = (offer.attributes.thermalsScore as number) ?? 75;
+      const thermals = (attrs.thermalsScore as number) ?? 75;
       prefSatisfaction = Math.min(1.0, Math.max(0.0, thermals / 100));
     } else if (pref.attribute === "upgradeability") {
-      prefSatisfaction = offer.attributes.ramUpgradeable ? 1.0 : 0.4;
+      prefSatisfaction = attrs.ramUpgradeable ? 1.0 : 0.4;
     } else if (pref.attribute === "gpuPerformance") {
-      prefSatisfaction = offer.attributes.cudaSupport ? 1.0 : 0.6;
+      prefSatisfaction = attrs.cudaSupport ? 1.0 : 0.6;
     } else if (pref.attribute === "batteryLife") {
-      const hours = (offer.attributes.batteryLifeHours as number) ?? (offer.attributes.batteryHours as number) ?? 6;
+      const hours = (attrs.batteryLifeHours as number) ?? (attrs.batteryHours as number) ?? 6;
       prefSatisfaction = Math.min(1.0, Math.max(0.0, hours / 10));
     } else if (pref.attribute === "noiseCancellation") {
-      prefSatisfaction = offer.attributes.anc ? 1.0 : 0.5;
+      prefSatisfaction = attrs.anc ? 1.0 : 0.5;
     } else if (pref.attribute === "cameraQuality") {
-      const cam = (offer.attributes.cameraScore as number) ?? 80;
+      const cam = (attrs.cameraScore as number) ?? 80;
       prefSatisfaction = Math.min(1.0, Math.max(0.0, cam / 100));
     } else if (pref.attribute === "refreshRate") {
-      const hz = (offer.attributes.refreshRateHz as number) ?? 60;
+      const hz = (attrs.refreshRateHz as number) ?? 60;
       prefSatisfaction = Math.min(1.0, hz / 120);
-    } else if (offer.attributes[pref.attribute] !== undefined) {
-      const val = offer.attributes[pref.attribute];
+    } else if (attrs[pref.attribute] !== undefined) {
+      const val = attrs[pref.attribute];
       if (typeof val === "boolean") prefSatisfaction = val ? 1.0 : 0.3;
       else if (typeof val === "number") prefSatisfaction = Math.min(1.0, val / 100);
       else prefSatisfaction = 0.8;
@@ -101,16 +102,17 @@ export function computePerformancePerDollar(
   offer: NormalizedOffer,
   allOffers: NormalizedOffer[]
 ): number {
+  const attrs = offer.attributes || {};
   const isLaptop =
     offer.productCategory === "Laptop" ||
-    offer.attributes.ramGb !== undefined ||
-    offer.attributes.thermalsScore !== undefined;
+    attrs.ramGb !== undefined ||
+    attrs.thermalsScore !== undefined;
 
   let rawBenchmark: number;
   if (isLaptop) {
-    const ram = (offer.attributes.ramGb as number) ?? 16;
-    const thermals = (offer.attributes.thermalsScore as number) ?? 80;
-    const hasCuda = offer.attributes.cudaSupport ? 1.2 : 1.0;
+    const ram = (attrs.ramGb as number) ?? 16;
+    const thermals = (attrs.thermalsScore as number) ?? 80;
+    const hasCuda = attrs.cudaSupport ? 1.2 : 1.0;
     rawBenchmark = (ram * 10 + thermals) * hasCuda;
   } else {
     // Category-agnostic benchmark using ratings and warranty
@@ -196,7 +198,7 @@ export function computeSellerConfidence(offer: NormalizedOffer): number {
   }
 
   // Listing completeness: 10
-  if (offer.attributes.ramGb && offer.attributes.storageGb) {
+  if (offer.attributes?.ramGb && offer.attributes?.storageGb) {
     points += 10;
   }
 
@@ -218,7 +220,7 @@ export function computeOwnershipValue(offer: NormalizedOffer): number {
   const d = offer.returnWindowDays ?? 0;
   const returnPts = Math.min(d / 30, 1) * 30;
 
-  const upgradePts = offer.attributes.ramUpgradeable ? 20 : 0;
+  const upgradePts = offer.attributes?.ramUpgradeable ? 20 : 0;
   const shippingPts =
     offer.shippingStatus === "KNOWN" && offer.shippingMinor === 0 ? 10 : 0;
 

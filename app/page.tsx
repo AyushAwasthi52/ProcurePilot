@@ -275,7 +275,7 @@ export default function HomePage() {
       if (res.ok) {
         const data = await res.json();
         setBrief(data.brief);
-        setClarification(null);
+        setClarification(data.clarificationQuestion ?? null);
       }
     } catch (err) {
       console.error("Failed to submit clarification:", err);
@@ -404,9 +404,21 @@ export default function HomePage() {
     setPrompt("");
   };
 
-  const formatPriceMinor = (minor?: number, curr = currency) => {
-    if (!minor) return "$0.00";
-    return `$${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curr}`;
+  const formatPriceMinor = (minor?: number | null, curr = currency) => {
+    if (minor == null || minor <= 0) return "Not specified";
+    const zeroDecimalCurrencies = ["JPY", "KRW"];
+    const isZeroDecimal = zeroDecimalCurrencies.includes(curr.toUpperCase());
+    const val = isZeroDecimal ? minor : minor / 100;
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: curr.toUpperCase(),
+        minimumFractionDigits: isZeroDecimal ? 0 : 2,
+        maximumFractionDigits: isZeroDecimal ? 0 : 2,
+      }).format(val);
+    } catch {
+      return `${val.toFixed(isZeroDecimal ? 0 : 2)} ${curr}`;
+    }
   };
 
   return (
@@ -650,11 +662,16 @@ export default function HomePage() {
                       Budget Cap
                     </span>
                     <span className="text-sm font-medium text-[#16191C]">
-                      {brief ? formatPriceMinor(brief.budget?.amountMinor, brief.budget?.currency) : "$0.00"} &middot;{" "}
-                      {brief?.budget?.includesShipping ? "shipping included" : "shipping excluded"}
+                      {brief?.budget?.amountMinor
+                        ? `${formatPriceMinor(brief.budget.amountMinor, brief.budget.currency)} · ${
+                            brief.budget.includesShipping ? "shipping included" : "shipping excluded"
+                          }`
+                        : brief
+                        ? "Not specified (open budget)"
+                        : "Awaiting input"}
                     </span>
                   </div>
-                  <ProvenanceChip kind="you-said" />
+                  <ProvenanceChip kind={brief?.budget?.amountMinor ? "you-said" : "inferred"} />
                 </div>
 
                 {/* Dynamic Must-Haves */}

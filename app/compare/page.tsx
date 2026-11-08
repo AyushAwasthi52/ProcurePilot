@@ -44,6 +44,24 @@ function formatSpecs(attributes: Record<string, unknown>, category?: string): st
   return "Standard specs";
 }
 
+export function formatCurrencyPrice(amountMinor?: number | null, currency = "USD"): string {
+  if (typeof amountMinor !== "number" || isNaN(amountMinor) || amountMinor <= 0) {
+    return "Not set";
+  }
+  const isZeroDecimal = currency.toUpperCase() === "JPY";
+  const val = isZeroDecimal ? amountMinor : amountMinor / 100;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: isZeroDecimal ? 0 : 2,
+      maximumFractionDigits: isZeroDecimal ? 0 : 2,
+    }).format(val);
+  } catch {
+    return `${currency} ${val.toLocaleString()}`;
+  }
+}
+
 function CompareContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,8 +84,53 @@ function CompareContent() {
         throw new Error("Could not find the specified purchase request");
       }
       const reqData = await reqRes.json();
-      const currentBrief = reqData.brief as PurchaseBrief;
-      setBrief(currentBrief);
+      const rawBrief = reqData.brief;
+
+      if (!rawBrief || typeof rawBrief !== "object") {
+        throw new Error(
+          "This purchase request does not have an active structured brief. Please return to the home screen and submit your requirements."
+        );
+      }
+
+      // Defensively normalize brief to prevent runtime contract violations
+      const normalizedBrief: PurchaseBrief = {
+        ...rawBrief,
+        category: typeof rawBrief.category === "string" && rawBrief.category.trim().length > 0 ? rawBrief.category : "General",
+        query: typeof rawBrief.query === "string" && rawBrief.query.trim().length > 0 ? rawBrief.query : "Purchasing requirement",
+        budget: rawBrief.budget && typeof rawBrief.budget === "object"
+          ? {
+              amountMinor:
+                typeof rawBrief.budget.amountMinor === "number" && rawBrief.budget.amountMinor > 0
+                  ? rawBrief.budget.amountMinor
+                  : null,
+              currency:
+                typeof rawBrief.budget.currency === "string" && rawBrief.budget.currency.length === 3
+                  ? rawBrief.budget.currency.toUpperCase()
+                  : (reqData.currency ?? "USD").toUpperCase(),
+              includesShipping:
+                typeof rawBrief.budget.includesShipping === "boolean"
+                  ? rawBrief.budget.includesShipping
+                  : true,
+              isKnown:
+                typeof rawBrief.budget.amountMinor === "number" && rawBrief.budget.amountMinor > 0,
+            }
+          : {
+              amountMinor: null,
+              currency: (reqData.currency ?? "USD").toUpperCase(),
+              includesShipping: true,
+              isKnown: false,
+            },
+        mustHave: Array.isArray(rawBrief.mustHave) ? rawBrief.mustHave : [],
+        preferences: Array.isArray(rawBrief.preferences) ? rawBrief.preferences : [],
+        useCases: Array.isArray(rawBrief.useCases) ? rawBrief.useCases : [],
+        region: typeof rawBrief.region === "string" && rawBrief.region.length === 2 ? rawBrief.region : (reqData.region ?? "US"),
+        quantity: typeof rawBrief.quantity === "number" && rawBrief.quantity > 0 ? rawBrief.quantity : 1,
+        urgency: rawBrief.urgency === "low" || rawBrief.urgency === "urgent" ? rawBrief.urgency : "normal",
+        assumptions: Array.isArray(rawBrief.assumptions) ? rawBrief.assumptions : [],
+        schemaVersion: 3,
+      };
+
+      setBrief(normalizedBrief);
 
       // 2. Launch or await Search Orchestration
       const csrfHeaders = await getCsrfHeaders();
@@ -87,7 +150,7 @@ function CompareContent() {
       setProviderOutcomes(searchData.providerOutcomes || {});
 
       // 3. Pure Domain Evaluation & Ranking
-      const evaluated = evaluateAndRankOffers(searchData.offers || [], currentBrief);
+      const evaluated = evaluateAndRankOffers(searchData.offers || [], normalizedBrief);
       setEvalResult(evaluated);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load comparison data");
@@ -188,7 +251,7 @@ function CompareContent() {
       shippingNote,
       warrantyText: c.offer.warrantyMonths ? `${c.offer.warrantyMonths} months` : "Not listed",
       isWarrantyUnverified: !c.offer.warrantyMonths,
-      specsText: formatSpecs(c.offer.attributes, brief.category),
+      specsText: formatSpecs(c.offer.attributes || {}, brief?.category || "General"),
       sellerConfidenceLevel:
         c.score.components.sellerConfidence >= 80
           ? "High"
@@ -208,18 +271,27 @@ function CompareContent() {
         <div className="bg-white rounded-2xl border border-[#E2DDD0] p-4 sm:p-5 shadow-sm mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <span className="font-heading font-bold text-base text-[#16191C] mr-2">
-              {brief.category}: {brief.query}
+              {brief?.category || "Product"}: {brief?.query || "Requirement"}
             </span>
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]">
-              Cap ${(brief.budget.amountMinor / 100).toLocaleString("en-US")} {brief.budget.currency}{" "}
-              {brief.budget.includesShipping ? "incl. shipping" : ""}
-            </span>
-            {brief.mustHave.map((mh, idx) => (
+            {brief?.budget?.amountMinor ? (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]">
+                Cap {formatCurrencyPrice(brief.budget.amountMinor, brief.budget.currency)}{" "}
+                {brief.budget.includesShipping ? "incl. shipping" : ""}
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FFF8EB] text-[#7A4E00] border border-[#F0D5A0]">
+                Budget cap: Not specified &middot;{" "}
+                <Link href={`/?editId=${requestId}`} className="underline ml-1 font-semibold">
+                  Set target budget
+                </Link>
+              </span>
+            )}
+            {(brief?.mustHave || []).map((mh, idx) => (
               <span
-                key={mh.attribute + idx}
+                key={(mh.attribute || "attr") + idx}
                 className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#FAF8F5] text-[#4D534F] border border-[#E2DDD0]"
               >
-                {mh.label || `${mh.attribute} ${mh.operator} ${String(mh.value)}`}
+                {mh.label || `${mh.attribute} ${mh.operator || "eq"} ${String(mh.value ?? "")}`}
               </span>
             ))}
           </div>
@@ -238,6 +310,10 @@ function CompareContent() {
             const isSeeded = providerId === "seeded_demo";
             const label = isSeeded
               ? "Seeded demo catalog"
+              : providerId === "serpapi_google_shopping"
+              ? "Google Shopping (SerpApi)"
+              : providerId === "ebay_browse"
+              ? "eBay Browse API"
               : providerId === "provider_a"
               ? "Catalog provider A"
               : providerId === "provider_b"
@@ -304,8 +380,12 @@ function CompareContent() {
               No matching offers discovered
             </h3>
             <p className="text-xs text-[#4D534F] max-w-lg mx-auto mb-6 leading-relaxed">
-              None of the discovered candidate offers passed all constraints within the target budget of $
-              {(brief.budget.amountMinor / 100).toFixed(2)} {brief.budget.currency}. You can loosen constraints or increase your budget.
+              {brief?.budget?.amountMinor
+                ? `None of the discovered candidate offers passed all constraints within the target budget cap of ${formatCurrencyPrice(
+                    brief.budget.amountMinor,
+                    brief.budget.currency
+                  )}. You can loosen constraints or increase your budget.`
+                : "None of the discovered candidate offers met your specified requirements. You can refine your search or adjust constraints."}
             </p>
             <Link
               href="/"

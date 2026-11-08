@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       rawPrompt,
       region: region ?? brief.region,
-      currency: currency ?? brief.budget.currency,
+      currency: currency ?? brief.budget?.currency ?? "USD",
       brief,
     });
 
@@ -55,8 +55,8 @@ export async function POST(req: NextRequest) {
       action: "CREATED_WITH_BRIEF",
       metadata: {
         category: brief.category,
-        budgetMinor: brief.budget.amountMinor,
-        currency: brief.budget.currency,
+        budgetMinor: brief.budget?.amountMinor ?? null,
+        currency: brief.budget?.currency ?? currency ?? "USD",
         mustHaveCount: brief.mustHave.length,
         hasClarification: !!clarificationQuestion,
       },

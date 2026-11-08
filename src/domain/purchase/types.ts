@@ -18,9 +18,10 @@ export interface PreferenceWeight {
 }
 
 export interface Budget {
-  amountMinor: number;
+  amountMinor: number | null;
   currency: string;
   includesShipping: boolean;
+  isKnown?: boolean;
 }
 
 export interface Assumption {

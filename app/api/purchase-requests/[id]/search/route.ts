@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         category: purchaseRequest.brief?.category,
         region: purchaseRequest.region,
         currency: purchaseRequest.currency,
-        maxBudgetMinor: purchaseRequest.brief?.budget?.amountMinor,
+        maxBudgetMinor: purchaseRequest.brief?.budget?.amountMinor ?? undefined,
       }
     );
 

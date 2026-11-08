@@ -37,13 +37,27 @@ export class GeminiLlmClient implements LlmClient {
       },
     };
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      if (controller.signal.aborted) {
+        throw new Error("Gemini API request timed out after 10000ms");
+      }
+      throw fetchErr;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!res.ok) {
       const errorText = await res.text();
@@ -60,9 +74,14 @@ export class GeminiLlmClient implements LlmClient {
       throw new Error("No text response returned from Gemini API");
     }
 
+    let cleanText = rawText.trim();
+    if (cleanText.startsWith("```")) {
+      cleanText = cleanText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    }
+
     let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(rawText);
+      parsedJson = JSON.parse(cleanText);
     } catch {
       throw new Error(`Failed to parse Gemini response as JSON: ${rawText}`);
     }

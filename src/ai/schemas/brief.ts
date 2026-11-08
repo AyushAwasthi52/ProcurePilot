@@ -33,9 +33,10 @@ export const PreferenceWeightSchema = z.object({
 });
 
 export const BudgetSchema = z.object({
-  amountMinor: z.number().int().positive(),
+  amountMinor: z.number().int().positive().nullable(),
   currency: z.string().length(3),
   includesShipping: z.boolean().default(true),
+  isKnown: z.boolean().default(true),
 });
 
 export const AssumptionSchema = z.object({

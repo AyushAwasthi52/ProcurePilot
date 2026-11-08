@@ -19,15 +19,27 @@ export function PriceIntelligenceCard({
   snapshotCount,
 }: PriceIntelligenceProps) {
   const hasRange = lowMinor !== undefined && highMinor !== undefined;
-  const lowFormatted =
-    lowMinor !== undefined
-      ? `$${(lowMinor / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-      : "—";
-  const nowFormatted = `$${(nowMinor / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  const highFormatted =
-    highMinor !== undefined
-      ? `$${(highMinor / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-      : "—";
+
+  const formatAmount = (minor?: number) => {
+    if (minor === undefined) return "—";
+    const zeroDecimalCurrencies = ["JPY", "KRW"];
+    const isZeroDecimal = zeroDecimalCurrencies.includes(currency.toUpperCase());
+    const val = isZeroDecimal ? minor : minor / 100;
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(val);
+    } catch {
+      return `${val.toFixed(0)} ${currency}`;
+    }
+  };
+
+  const lowFormatted = formatAmount(lowMinor);
+  const nowFormatted = formatAmount(nowMinor);
+  const highFormatted = formatAmount(highMinor);
 
   const defaultAdvice = hasRange
     ? nowMinor <= lowMinor!

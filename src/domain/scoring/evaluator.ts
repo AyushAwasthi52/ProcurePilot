@@ -87,13 +87,15 @@ export function evaluateAndRankOffers(
       continue;
     }
 
-    if (constraints.isOverBudget) {
+    if (constraints.isOverBudget && typeof brief.budget?.amountMinor === "number") {
+      const isZeroDecimal = (brief.budget.currency || "USD").toUpperCase() === "JPY";
+      const factor = isZeroDecimal ? 1 : 100;
       const overBy = Math.round(
-        (offer.totalKnownMinor - brief.budget.amountMinor) / 100
+        (offer.totalKnownMinor - brief.budget.amountMinor) / factor
       );
       overBudgetCandidates.push({
         offer,
-        reason: `$${overBy} over your cap - scores well on fit but breaks the hard budget.`,
+        reason: `${brief.budget.currency ?? "$"}${overBy} over your cap - scores well on fit but breaks the hard budget.`,
         constraints,
         trust,
         displayedScore: 90, // Representative high score for overbudget premium item

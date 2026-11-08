@@ -15,7 +15,7 @@ export function evaluateTrustRules(
     !offer.merchantId ||
     offer.merchantId === "mer_unverified" ||
     offer.merchantName.toLowerCase().includes("unknown") ||
-    offer.attributes.identityVerified === false;
+    offer.attributes?.identityVerified === false;
 
   if (isMerchantUnverified) {
     signals.push({
@@ -99,7 +99,7 @@ export function evaluateTrustRules(
   }
 
   // TR-08: Prompt injection in listing text
-  const rawText = JSON.stringify(offer.attributes).toLowerCase();
+  const rawText = JSON.stringify(offer.attributes || {}).toLowerCase();
   if (
     rawText.includes("ignore previous instructions") ||
     rawText.includes("system prompt") ||

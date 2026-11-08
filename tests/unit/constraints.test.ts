@@ -40,6 +40,7 @@ describe("Tri-State Constraint Evaluation (Section 6.3, FR-016)", () => {
     amountMinor: 180000,
     currency: "USD",
     includesShipping: true,
+    isKnown: true,
   };
 
   it("returns PASS when attribute is present and meets constraint", () => {

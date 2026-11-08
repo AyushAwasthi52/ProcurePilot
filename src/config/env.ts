@@ -18,7 +18,7 @@ const EnvSchema = z
 
     // Product Discovery Providers
     PRODUCT_PROVIDER: z
-      .enum(["all", "seeded", "provider_a", "provider_b"])
+      .enum(["all", "seeded", "provider_a", "provider_b", "serpapi", "ebay"])
       .default("all"),
     PRODUCT_PROVIDER_API_KEY: z.string().optional(),
     PROVIDER_A_ENDPOINT: z.string().url().optional(),
@@ -28,6 +28,14 @@ const EnvSchema = z
     PROVIDER_MODE: z.enum(["demo", "live"]).default("demo"),
     PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().default(6000),
     OFFER_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+
+    // Real External Product Providers (Google Shopping via SerpApi & eBay Browse API)
+    SERPAPI_API_KEY: z.string().optional(),
+    SERPAPI_BASE_URL: z.string().url().default("https://serpapi.com/search.json"),
+    EBAY_CLIENT_ID: z.string().optional(),
+    EBAY_CLIENT_SECRET: z.string().optional(),
+    EBAY_ENV: z.enum(["sandbox", "production"]).default("production"),
+    EBAY_MARKETPLACE_ID: z.string().optional(),
 
     // Purchase Plan
     PLAN_TTL_SECONDS: z.coerce.number().int().positive().default(600),

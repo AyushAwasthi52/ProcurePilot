@@ -4,16 +4,53 @@ import {
   ProviderSearchResult,
   ProviderOffer,
   ProviderHealth,
-  AvailabilityStatus,
 } from "../types";
-import { SEED_DATA } from "@/prisma/seed";
+
+// Distinct external partner B catalog items (includes TR-02 anomaly offer for trust testing)
+const PARTNER_B_CATALOG_OFFERS: ProviderOffer[] = [
+  {
+    providerId: "provider_b",
+    providerOfferId: "ofr_pb_lumen16_anomaly",
+    productTitle: "Lumen Aero 16",
+    brand: "Lumen",
+    category: "Laptop",
+    attributes: {
+      ramGb: 32,
+      storageGb: 1024,
+      gpu: "NVIDIA GeForce RTX 4060",
+      identityVerified: false, // TR-01 failure
+      warrantyMonths: null,
+      sellerRating: 2.1,
+      ratingCount: 3,
+    },
+    merchantName: "Unknown Merchant 9482",
+    merchantId: "mer_unverified",
+    price: {
+      amountMinor: 89900, // 45% below comparable median (TR-02 anomaly)
+      currency: "USD",
+    },
+    shipping: {
+      status: "UNKNOWN",
+    },
+    availability: "in_stock",
+    productUrl: "https://shady-bargains.example/lumen-aero-16",
+    sellerRating: 2.1,
+    ratingCount: 3,
+    observedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    isDemo: false,
+  },
+];
 
 export class CatalogProviderBAdapter implements ProductProvider {
   id = "provider_b";
   name = "Catalog provider B";
   shouldTimeout = false;
 
-  constructor(options?: { shouldTimeout?: boolean }) {
+  constructor(options?: {
+    apiKey?: string;
+    endpoint?: string;
+    shouldTimeout?: boolean;
+  }) {
     if (options?.shouldTimeout !== undefined) {
       this.shouldTimeout = options.shouldTimeout;
     }
@@ -41,48 +78,19 @@ export class CatalogProviderBAdapter implements ProductProvider {
       });
     }
 
-    const offers: ProviderOffer[] = [];
-
-    // Filter provider_b offers
-    for (const prod of SEED_DATA.products) {
-      for (const off of prod.offers) {
-        if (off.providerId === "provider_b") {
-          const offAttr = off.attributes as Record<string, unknown>;
-          offers.push({
-            providerId: this.id,
-            providerOfferId: off.providerOfferId,
-            productTitle: prod.title,
-            brand: prod.brand,
-            category: prod.category,
-            attributes: {
-              ...prod.attributes,
-              ...off.attributes,
-            },
-            merchantName: off.merchantName,
-            merchantId: off.merchantId,
-            price: {
-              amountMinor: off.priceMinor,
-              currency: off.currency,
-            },
-            shipping: {
-              status: off.shippingStatus,
-              amountMinor: off.shippingMinor ?? undefined,
-              currency: off.currency,
-            },
-            availability: off.availability as AvailabilityStatus,
-            productUrl: off.url,
-            sellerRating: typeof offAttr.sellerRating === "number" ? offAttr.sellerRating : undefined,
-            ratingCount: typeof offAttr.ratingCount === "number" ? offAttr.ratingCount : undefined,
-            observedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-            isDemo: false,
-          });
-        }
-      }
-    }
+    const queryLower = input.query.toLowerCase();
+    const matchedOffers = PARTNER_B_CATALOG_OFFERS.filter(
+      (o) =>
+        o.productTitle.toLowerCase().includes(queryLower) ||
+        (o.category ? o.category.toLowerCase().includes(queryLower) : false) ||
+        queryLower.includes("laptop") ||
+        queryLower.includes("programming") ||
+        queryLower.includes("ml")
+    );
 
     return {
       providerId: this.id,
-      offers,
+      offers: matchedOffers,
       latencyMs: Date.now() - start,
     };
   }

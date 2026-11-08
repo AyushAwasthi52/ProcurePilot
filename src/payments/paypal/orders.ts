@@ -19,13 +19,18 @@ import {
 export async function createOrder(
   input: CreateOrderInput
 ): Promise<CreateOrderResult> {
-  const useSimulated =
-    input.simulated ||
-    process.env.PAYMENTS_SIMULATED === "true" ||
-    !isPayPalConfigured();
+  const isExplicitSimulation = input.simulated === true;
+  const isSimulationEnv = process.env.PAYMENTS_SIMULATED === "true";
 
-  if (useSimulated) {
+  if (isExplicitSimulation || isSimulationEnv) {
     return createSimulatedOrder(input);
+  }
+
+  // Not in simulation mode: PayPal credentials MUST be configured
+  if (!isPayPalConfigured()) {
+    throw new Error(
+      "PayPal credentials are not configured. To test payments without credentials, set PAYMENTS_SIMULATED=true in your environment or pass simulated=true."
+    );
   }
 
   // Check idempotency
@@ -121,13 +126,17 @@ export async function createOrder(
 export async function captureOrder(
   input: CaptureOrderInput
 ): Promise<CaptureOrderResult> {
-  const useSimulated =
-    input.simulated ||
-    process.env.PAYMENTS_SIMULATED === "true" ||
-    !isPayPalConfigured();
+  const isExplicitSimulation = input.simulated === true;
+  const isSimulationEnv = process.env.PAYMENTS_SIMULATED === "true";
 
-  if (useSimulated) {
+  if (isExplicitSimulation || isSimulationEnv) {
     return captureSimulatedOrder(input);
+  }
+
+  if (!isPayPalConfigured()) {
+    throw new Error(
+      "PayPal credentials are not configured. Cannot verify real PayPal capture."
+    );
   }
 
   const payment = await getPayment(input.paymentId);
@@ -182,6 +191,26 @@ export async function captureOrder(
     throw new Error(`PayPal order capture was not completed: ${data.status}`);
   }
 
+  // Verify captured amount from PayPal API response matches expected
+  const capturedAmountVal =
+    data.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value;
+  const capturedCurrency =
+    data.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.currency_code;
+
+  if (capturedAmountVal && capturedCurrency) {
+    const capturedMinor = Math.round(parseFloat(capturedAmountVal) * 100);
+    if (capturedMinor !== payment.amountMinor) {
+      throw new Error(
+        `PayPal captured amount (${capturedMinor}) differs from approved plan amount (${payment.amountMinor})`
+      );
+    }
+    if (capturedCurrency.toUpperCase() !== payment.currency.toUpperCase()) {
+      throw new Error(
+        `PayPal captured currency (${capturedCurrency}) differs from approved plan currency (${payment.currency})`
+      );
+    }
+  }
+
   const captureId =
     data.purchase_units?.[0]?.payments?.captures?.[0]?.id || `CAP_${Date.now()}`;
 
@@ -200,4 +229,3 @@ export async function captureOrder(
     capturedAt: new Date(),
   };
 }
-

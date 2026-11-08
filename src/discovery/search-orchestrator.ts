@@ -53,8 +53,13 @@ export class SearchOrchestrator {
     requestId: string,
     input: ProviderSearchInput,
     onProgress?: SearchProgressCallback,
-    timeoutMs = 6000
+    timeoutMs?: number
   ): Promise<SearchRunResult> {
+    const effectiveTimeoutMs =
+      timeoutMs ??
+      (typeof process !== "undefined" && process.env.PROVIDER_TIMEOUT_MS
+        ? parseInt(process.env.PROVIDER_TIMEOUT_MS, 10)
+        : 6000);
     const controller = new AbortController();
     this.activeRuns.set(runId, { controller });
 
@@ -79,7 +84,7 @@ export class SearchOrchestrator {
 
       const timeoutId = setTimeout(() => {
         timeoutController.abort();
-      }, timeoutMs);
+      }, effectiveTimeoutMs);
 
       try {
         const res = await provider.search(input, timeoutController.signal);

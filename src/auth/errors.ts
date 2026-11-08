@@ -53,6 +53,24 @@ export class ValidationFailedError extends ApiError {
   }
 }
 
+export class PlanExpiredError extends ApiError {
+  constructor(message = "Purchase plan has expired. Please refresh the plan.") {
+    super("PLAN_EXPIRED", message, 410, true);
+  }
+}
+
+export class PlanHashMismatchError extends ApiError {
+  constructor(message = "Approval hash does not match current plan hash.") {
+    super("PLAN_HASH_MISMATCH", message, 409, false);
+  }
+}
+
+export class OfferChangedError extends ApiError {
+  constructor(message = "Offer price or availability has changed.") {
+    super("OFFER_CHANGED", message, 409, true);
+  }
+}
+
 export function createErrorResponse(
   error: unknown,
   requestId: string

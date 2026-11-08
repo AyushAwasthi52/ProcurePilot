@@ -1,0 +1,12 @@
+{
+  "name": "procurepilot-control-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local MCP control plane for the ProcurePilot Antigravity engineering workflow",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.0"
+  }
+}
